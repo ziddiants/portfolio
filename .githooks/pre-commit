@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# pre-commit — VF-06: keep private files out of the public repo (ENG-02, N10/N12).
+#
+# Blocks the commit if any staged path is:
+#   - an internal document (PRD, ERD, build plan, design doc, content sources…)
+#   - the teammate names list (names.txt) or anything under private/
+#   - a .env file, anything under .inputs/, or a *.private.* file
+#
+# This is the first of two layers (.gitignore is the other). Secret scanning
+# with gitleaks (VF-16) is added to this hook at ENG-06.
+
+set -uo pipefail
+
+# Staged files that are being added, copied or modified.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+patterns=(
+  '(^|/)\.env($|\.)'
+  '(^|/)\.inputs/'
+  '(^|/)names\.txt$'
+  '(^|/)private/'
+  '\.private\.'
+  '(^|/)(PRD|PRD-Brief|Architecture|design-brand|build-plan|content-sources|content-pack|alignment-audit)\.md$'
+  '(^|/)Past Mistakes and Lessons\.md$'
+  '(^|/)project-CLAUDE\.md$'
+)
+
+blocked=()
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  for p in "${patterns[@]}"; do
+    if printf '%s' "$f" | grep -Eiq "$p"; then
+      blocked+=("$f")
+      break
+    fi
+  done
+done <<< "$staged"
+
+if [ "${#blocked[@]}" -gt 0 ]; then
+  {
+    echo ""
+    echo "  ✗ commit blocked — private files must never enter the public repo (VF-06, N10/N12):"
+    for f in "${blocked[@]}"; do echo "      - $f"; done
+    echo ""
+    echo "  fix: unstage them with 'git restore --staged <file>'."
+    echo "       Private docs live in the vault ~/my_builds/portfolio, not in this repo."
+    echo ""
+  } >&2
+  exit 1
+fi
+
+exit 0

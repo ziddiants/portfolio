@@ -1,0 +1,14 @@
+{
+  "name": "portfolio-site",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Aditya Gupta portfolio — two static Astro sites built from one codebase.",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "doctor": "node scripts/doctor.mjs",
+    "test:precommit": "bash tests/precommit.test.sh"
+  }
+}

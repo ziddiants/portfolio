@@ -1,0 +1,25 @@
+# Build output
+dist/
+.build/
+
+# Raw inputs — private source files (DOCX, PDFs) placed for processing
+.inputs/
+
+# Dependencies
+node_modules/
+
+# Secrets and local environment
+.env*
+
+# Anything explicitly marked private
+*.private.*
+
+# Local tool state
+.wrangler/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
