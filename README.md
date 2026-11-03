@@ -21,11 +21,19 @@ not in this repository.
 Requires Node 24 (see `.nvmrc`).
 
 ```sh
-npm run doctor   # check the local toolchain, logins and setup are ready
+npm run doctor          # check the local toolchain, logins and setup are ready
+npm run dev:payments    # local preview of one version (or: npm run dev -- <id>)
+npm run build           # every version into dist/<id>/, each then verified
+npm run build:payments  # one version (or: node scripts/build-all.mjs <id>)
+npm run test:versions   # multi-version build tests
 ```
 
-More commands (local preview, build, verify, release) land as the build
-progresses and will be listed here.
+Each folder in `versions/` is one version of the site: a `version.json`
+settings file, a résumé and a preview image. A build sees only one version.
+Adding a version is adding a folder; no shared file changes.
+
+More commands (verify, release) land as the build progresses and will be
+listed here.
 
 ## Repository rules
 

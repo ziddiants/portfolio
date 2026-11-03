@@ -1,0 +1,13 @@
+{
+  "id": "payments",
+  "siteUrl": "https://aditya-payments-pm.pages.dev",
+  "pagesProject": "aditya-payments-pm",
+  "pageTitle": "Aditya Gupta · Product Manager, Payments",
+  "heroSubline": "Product Manager · consumer payments & monetization · now building with AI",
+  "carinfoBullets": ["PLACEHOLDER (ENG-09): payments CarInfo bullets from the Payments résumé"],
+  "resumeFile": "resume.pdf",
+  "ogImage": "og.png",
+  "indexable": true,
+  "analyticsToken": "PLACEHOLDER (ADI-02): payments analytics token",
+  "approvedNumbers": ["PLACEHOLDER (ENG-09): payments approved numbers"]
+}

@@ -9,16 +9,23 @@
   },
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
-    "dev": "astro dev",
-    "check": "astro check",
-    "build": "astro check && astro build",
-    "preview": "astro preview",
+    "dev": "node scripts/dev.mjs",
+    "dev:payments": "node scripts/dev.mjs payments",
+    "dev:consumer": "node scripts/dev.mjs consumer",
+    "check": "SITE_VERSION=payments astro check",
+    "build": "node scripts/build-all.mjs",
+    "build:payments": "node scripts/build-all.mjs payments",
+    "build:consumer": "node scripts/build-all.mjs consumer",
+    "preview:payments": "SITE_VERSION=payments astro preview",
+    "preview:consumer": "SITE_VERSION=consumer astro preview",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test:precommit": "bash tests/precommit.test.sh",
-    "test:static": "bash tests/static-output.test.sh"
+    "test:static": "bash tests/static-output.test.sh",
+    "test:versions": "node --test 'tests/versions/*.test.mjs'"
   },
   "dependencies": {
+    "@astrojs/sitemap": "3.7.4",
     "astro": "7.4.4"
   },
   "devDependencies": {

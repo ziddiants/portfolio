@@ -1,0 +1,13 @@
+{
+  "id": "consumer",
+  "siteUrl": "https://aditya-consumerapp-pm.pages.dev",
+  "pagesProject": "aditya-consumerapp-pm",
+  "pageTitle": "Aditya Gupta · Product Manager, Consumer Apps",
+  "heroSubline": "Product Manager · consumer apps & monetization · now building with AI",
+  "carinfoBullets": ["PLACEHOLDER (ENG-09): consumer CarInfo bullets from the Consumer résumé"],
+  "resumeFile": "resume.pdf",
+  "ogImage": "og.png",
+  "indexable": false,
+  "analyticsToken": "PLACEHOLDER (ADI-02): consumer analytics token",
+  "approvedNumbers": ["PLACEHOLDER (ENG-09): consumer approved numbers"]
+}

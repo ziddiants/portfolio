@@ -2,6 +2,8 @@
 # TC-A09 — the build output is static only, and astro check is clean (ENG-03, N14).
 # Runs the real build, then proves each guard can fail: a guard that has never
 # been seen to fail is not trusted.
+# Since ENG-04 the config needs a version, so astro check runs for one (any version type-checks
+# the same: pages use the schema type) and the build writes one folder per version.
 
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 2   # repo root
@@ -29,7 +31,7 @@ server_files() {
 }
 
 # 1) astro check is clean on the real project.
-if npx astro check >"$out" 2>&1 && grep -q '0 errors' "$out"; then
+if SITE_VERSION=payments npx astro check >"$out" 2>&1 && grep -q '0 errors' "$out"; then
   pass "astro check reports 0 errors"
 else
   bad "astro check is not clean"; sed 's/^/      /' "$out"
@@ -37,19 +39,26 @@ fi
 
 # 2) Strict mode is on: an implicit-any parameter must make astro check fail.
 printf 'export function probe(x) {\n  return x;\n}\n' > "$probe"
-if npx astro check >"$out" 2>&1; then
+if SITE_VERSION=payments npx astro check >"$out" 2>&1; then
   bad "astro check accepted an implicit-any parameter (strict mode is off)"
 else
   pass "astro check rejects an implicit-any parameter (strict mode is on)"
 fi
 rm -f "$probe"
 
-# 3) The real build succeeds and writes an index page.
+# 3) The real build succeeds and writes an index page for every version.
 rm -rf dist
-if npm run build >"$out" 2>&1 && [ -f dist/index.html ]; then
-  pass "npm run build succeeds and writes dist/index.html"
+versions=$(find versions -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+missing=""
+if npm run build >"$out" 2>&1; then
+  for id in $versions; do [ -f "dist/$id/index.html" ] || missing="$missing $id"; done
 else
-  bad "npm run build failed or wrote no dist/index.html"; sed 's/^/      /' "$out"
+  missing="(build failed)"
+fi
+if [ -n "$versions" ] && [ -z "$missing" ]; then
+  pass "npm run build succeeds and writes dist/<id>/index.html for: $(echo $versions)"
+else
+  bad "npm run build failed or wrote no index page for:$missing"; sed 's/^/      /' "$out"
 fi
 
 # 4) The output holds no server-side files.

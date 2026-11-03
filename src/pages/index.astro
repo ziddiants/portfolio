@@ -1,14 +1,17 @@
 ---
-// Placeholder page. ENG-04 and later tickets replace it.
+// Placeholder page. It shows two version fields so the multi-version tests (TC-A02, TC-A03)
+// have something to compare. The real home page is M2.
+import version from '@version';
 ---
 
 <html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Portfolio</title>
+    <title>{version.pageTitle}</title>
   </head>
   <body>
     <h1>Portfolio</h1>
+    <p>{version.heroSubline}</p>
   </body>
 </html>
