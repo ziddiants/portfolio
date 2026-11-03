@@ -6,6 +6,10 @@ import { ctxFor, tempRepo } from './helpers.mjs';
 const FORBIDDEN = [
   '.env',
   '.env.local',
+  '.envrc',
+  '.env-prod',
+  'prod.env',
+  'config/secrets.env',
   'app/.env.production',
   '.inputs/raw.pdf',
   'names.txt',

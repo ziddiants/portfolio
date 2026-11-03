@@ -8,11 +8,16 @@ import { formatFinding, loadRules, runRules } from './runner.mjs';
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const PRECOMMIT_RULES = ['VF-06', 'VF-16'];
 
-// Files being added, copied or modified. A deleted file cannot leak anything.
-const staged = execFileSync('git', ['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z'], {
-  cwd: ROOT,
-  encoding: 'utf8',
-})
+// Files being added, copied, modified or type-changed. A deleted file cannot leak anything.
+// --no-renames: a renamed file must show up under its new name, or a rename to PRD.md would pass.
+const staged = execFileSync(
+  'git',
+  ['diff', '--cached', '--no-renames', '--name-only', '--diff-filter=ACMT', '-z'],
+  {
+    cwd: ROOT,
+    encoding: 'utf8',
+  },
+)
   .split('\0')
   .filter(Boolean);
 if (staged.length === 0) process.exit(0);

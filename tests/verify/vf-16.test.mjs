@@ -85,4 +85,26 @@ describe('TC-B16: VF-16 secrets', () => {
     expect(found).toHaveLength(1);
     expect(found[0].message).toMatch(/gitleaks failed/);
   });
+
+  describe('a "gitleaks:allow" comment does not switch the scan off (only .gitleaksignore may)', () => {
+    const allowed = () => `const k = "${fakeToken()}"; // gitleaks:allow\n`;
+
+    test('in the built site', () => {
+      const repo = tempRepo();
+      writeFiles(repo, { 'dist/payments/index.html': `<script>${allowed()}</script>\n` });
+      expect(vf16.run(distCtx(repo))).toHaveLength(1);
+    });
+
+    test('in a git commit', () => {
+      const repo = tempRepo({ 'a.js': allowed() });
+      expect(vf16.run(ctxFor(repo)).map((f) => f.file)).toEqual(['a.js']);
+    });
+
+    test('in a staged file', () => {
+      const repo = tempRepo();
+      writeFiles(repo, { 'a.js': allowed() });
+      git(repo, 'add', 'a.js');
+      expect(vf16.run(ctxFor(repo, { staged: ['a.js'] })).map((f) => f.file)).toEqual(['a.js']);
+    });
+  });
 });

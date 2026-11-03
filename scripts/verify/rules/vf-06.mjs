@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 
 // Case-insensitive. The same list the ENG-02 hook used; this file is now its only copy.
 export const FORBIDDEN = [
-  /(^|\/)\.env($|\.)/i,
+  /(^|\/)\.env/i, // .env, .env.local, .env-prod, .envrc
+  /\.env$/i, // prod.env, secrets.env
   /(^|\/)\.inputs\//i,
   /(^|\/)names\.txt$/i,
   /(^|\/)private\//i,

@@ -44,7 +44,7 @@ if bash "$hook" >"$out" 2>&1; then
 else
   all=1
   for f in PRD.md private/names.txt .env .inputs/raw.pdf; do
-    grep -q "$f" "$out" || { bad "hook did not name $f"; all=0; }
+    grep -q "✗ VF-06 $f" "$out" || { bad "hook did not report $f on a VF-06 line"; all=0; }
   done
   [ "$all" = 1 ] && pass "hook blocked all 4 forbidden files and named each"
 fi
@@ -62,7 +62,7 @@ printf 'const k = "ghp_%s";\n' "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | he
 git add -f "$leak"
 if bash "$hook" >"$out" 2>&1; then
   bad "hook ALLOWED a staged fake key (should have blocked)"
-elif grep -q "secret found" "$out" && grep -q "$leak" "$out"; then
+elif grep -q "✗ VF-16 $leak.*secret found" "$out"; then
   pass "hook blocked a staged fake key and named the file"
 else
   bad "hook blocked, but did not report the secret"; sed 's/^/      /' "$out"
@@ -72,7 +72,7 @@ restore_index
 # 5) The hook fails closed: with no node on PATH it blocks, it does not wave the commit through.
 git add -f package.json
 if PATH="/usr/bin:/bin" command -v node >/dev/null 2>&1; then
-  pass "(skipped) node is in /usr/bin, so the no-node case cannot be built here"
+  printf '  - SKIPPED: node is in /usr/bin, so the no-node case cannot be built here\n'
 elif PATH="/usr/bin:/bin" bash "$hook" >"$out" 2>&1; then
   bad "hook ALLOWED a commit with no node (should fail closed)"
 else
@@ -80,7 +80,50 @@ else
 fi
 restore_index
 
-# 6) The test left the index as it found it.
+# 6) A rename to a private name is caught. Plumbing stages the rename without touching the files.
+blob=$(git rev-parse HEAD:.nvmrc)
+git rm -q --cached .nvmrc
+git update-index --add --cacheinfo "100644,$blob,PRD.md"
+if bash "$hook" >"$out" 2>&1; then
+  bad "hook ALLOWED a file renamed to PRD.md (should have blocked)"
+elif grep -q "✗ VF-06 PRD.md" "$out"; then
+  pass "hook blocked a file renamed to a private name"
+else
+  bad "hook blocked, but did not report PRD.md"; sed 's/^/      /' "$out"
+fi
+restore_index
+
+# 7) A "gitleaks:allow" comment does not hide a secret.
+allow="tc_b06_allow.txt"
+created+=("$allow")
+printf 'const k = "ghp_%s"; // gitleaks:allow\n' "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | head -c 36)" > "$allow"
+git add -f "$allow"
+if bash "$hook" >"$out" 2>&1; then
+  bad "hook ALLOWED a key marked gitleaks:allow (should have blocked)"
+elif grep -q "✗ VF-16 $allow.*secret found" "$out"; then
+  pass "hook ignores gitleaks:allow and blocks the key"
+else
+  bad "hook blocked, but did not report the secret"; sed 's/^/      /' "$out"
+fi
+restore_index
+
+# 8) A commit that only deletes a file is allowed (nothing can leak).
+git rm -q --cached .nvmrc
+if bash "$hook" >/dev/null 2>&1; then pass "hook allows a deletion-only commit"; else bad "hook blocked a deletion-only commit"; fi
+restore_index
+
+# 9) The hook fails closed when its script is missing (a crash must block, not pass).
+crash_dir=$(mktemp -d)
+cp "$hook" "$crash_dir/pre-commit"
+( cd "$crash_dir" && git init -q && printf 'x' > a.txt && git add a.txt )
+if ( cd "$crash_dir" && bash ./pre-commit ) >"$out" 2>&1; then
+  bad "hook ALLOWED a commit when scripts/verify/precommit.mjs was missing (should fail closed)"
+else
+  pass "hook fails closed when its script is missing"
+fi
+rm -rf "$crash_dir"
+
+# 10) The test left the index as it found it.
 [ "$(git write-tree)" = "$orig_tree" ] && pass "the index is exactly as the test found it" || bad "the index changed"
 
 echo ""

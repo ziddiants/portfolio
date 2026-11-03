@@ -11,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 import { listVersions } from '../../versions/load.mjs';
 import { formatFinding, loadRules, runRules } from './runner.mjs';
 
+// Every rule that must exist. ENG-07 adds the other 14 ids here.
+const REQUIRED_RULES = ['VF-06', 'VF-16'];
+
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const args = process.argv.slice(2);
 const mode = args.includes('--ci') || process.env.VERIFY_MODE === 'ci' ? 'ci' : 'local';
@@ -31,13 +34,17 @@ for (const target of targets) {
     failed = true;
     continue;
   }
-  const result = runRules(rules, {
-    root: ROOT,
-    distDir,
-    mode,
-    staged: null,
-    privateAvailable: existsSync(join(ROOT, 'private')),
-  });
+  const result = runRules(
+    rules,
+    {
+      root: ROOT,
+      distDir,
+      mode,
+      staged: null,
+      privateAvailable: existsSync(join(ROOT, 'private')),
+    },
+    REQUIRED_RULES,
+  );
   for (const f of result.findings) console.error(formatFinding(f));
   const skipped = result.skipped.length > 0 ? `, ${result.skipped.length} skipped` : '';
   if (result.findings.length > 0) {

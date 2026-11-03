@@ -55,6 +55,14 @@ describe('runRules', () => {
     }
   });
 
+  test('a required rule that is missing is a failure, even when the others pass', () => {
+    const r = runRules([pass], ctxFor('/x'), ['T-1', 'T-9']);
+    expect(r.passed).toEqual(['T-1']);
+    expect(r.findings).toHaveLength(1);
+    expect(r.findings[0]).toMatchObject({ rule: 'T-9' });
+    expect(r.findings[0].message).toMatch(/required rule is missing/);
+  });
+
   test('a module without id and run is a failure', () => {
     const r = runRules([{ file: 'broken.mjs' }], ctxFor('/x'));
     expect(r.findings[0].message).toMatch(/broken\.mjs must export/);
@@ -116,6 +124,18 @@ describe('the verify command', () => {
       const r = cli(dir);
       expect(r.status).toBe(1);
       expect(r.out).toMatch(/verify: no build folder at dist\/consumer/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('a deleted rule file makes the command fail, not pass with fewer rules', () => {
+    const dir = cliRepo();
+    try {
+      rmSync(join(dir, 'scripts', 'verify', 'rules', 'vf-16.mjs'));
+      const r = cli(dir, 'dist/payments');
+      expect(r.status).toBe(1);
+      expect(r.out).toMatch(/✗ VF-16 — this required rule is missing/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

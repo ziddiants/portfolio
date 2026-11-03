@@ -31,6 +31,8 @@ export function scan(root, args) {
         report,
         '--gitleaks-ignore-path',
         root,
+        // A "gitleaks:allow" comment must not switch the scan off. Only .gitleaksignore may.
+        '--ignore-gitleaks-allow',
       ],
       { cwd: root, encoding: 'utf8' },
     );
@@ -54,6 +56,15 @@ export function scan(root, args) {
       ];
     }
     const leaks = JSON.parse(readFileSync(report, 'utf8'));
+    if (!Array.isArray(leaks) || leaks.length === 0) {
+      return [
+        {
+          file: '',
+          message: 'gitleaks reported leaks (exit 2) but its report is empty or unreadable',
+          fix: 'run the same gitleaks command by hand and read its output',
+        },
+      ];
+    }
     return leaks.map((l) => ({
       file: l.File,
       line: l.StartLine,

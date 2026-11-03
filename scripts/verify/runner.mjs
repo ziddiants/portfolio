@@ -30,9 +30,22 @@ function badRule(rule) {
   return null;
 }
 
-/** Runs the rules. Returns { passed: [id], skipped: [id], findings: [{ rule, … }] }. */
-export function runRules(rules, ctx) {
+/**
+ * Runs the rules. Returns { passed: [id], skipped: [id], findings: [{ rule, … }] }.
+ * `required` lists rule ids that must exist. A deleted rule file is then a failure, not a
+ * smaller rule set that still passes.
+ */
+export function runRules(rules, ctx, required = []) {
   const result = { passed: [], skipped: [], findings: [] };
+  for (const id of required) {
+    if (!rules.some((r) => r.id === id)) {
+      result.findings.push({
+        rule: id,
+        message: 'this required rule is missing from scripts/verify/rules/',
+        fix: 'restore the rule file',
+      });
+    }
+  }
   if (rules.length === 0) {
     result.findings.push({
       rule: 'runner',
