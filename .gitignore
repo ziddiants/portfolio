@@ -14,6 +14,10 @@ node_modules/
 # Anything explicitly marked private
 *.private.*
 
+# Project rules for Claude Code: a local symlink to the vault's
+# project-CLAUDE.md (single source of truth), kept local, never published (D68)
+CLAUDE.md
+
 # Local tool state
 .wrangler/
 
