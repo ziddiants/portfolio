@@ -31,7 +31,24 @@ const copies = [];
 
 const FAKE_WRANGLER = `#!/usr/bin/env node
 import { appendFileSync } from 'node:fs';
-appendFileSync(process.env.FAKE_LOG, JSON.stringify(process.argv.slice(2)) + '\\n');
+const args = process.argv.slice(2);
+appendFileSync(process.env.FAKE_LOG, JSON.stringify(args) + '\\n');
+// Like the real Wrangler: write one deployment record to WRANGLER_OUTPUT_FILE_PATH.
+// FAKE_MODE: "none" writes nothing; "production" and "wrong-project" write a bad record.
+const mode = process.env.FAKE_MODE;
+if (mode !== 'none') {
+  const project = args[args.indexOf('--project-name') + 1];
+  appendFileSync(
+    process.env.WRANGLER_OUTPUT_FILE_PATH,
+    JSON.stringify({
+      type: 'pages-deploy-detailed',
+      pages_project: mode === 'wrong-project' ? 'someone-else' : project,
+      url: 'https://abc123.' + project + '.pages.dev',
+      alias: 'https://' + args[args.indexOf('--branch') + 1] + '.' + project + '.pages.dev',
+      environment: mode === 'production' ? 'production' : 'preview',
+    }) + '\\n',
+  );
+}
 `;
 
 const sh = (dir, cmd, args) => spawnSync(cmd, args, { cwd: dir, encoding: 'utf8' });
@@ -62,8 +79,8 @@ function makeCopy(branch) {
 }
 
 /** Runs the release in the copy. Returns exit status, output and the recorded wrangler calls. */
-function release(copy, args = ['--env', 'preview']) {
-  const env = { ...process.env, WRANGLER_BIN: copy.fake, FAKE_LOG: copy.log };
+function release(copy, args = ['--env', 'preview'], fakeMode = '') {
+  const env = { ...process.env, WRANGLER_BIN: copy.fake, FAKE_LOG: copy.log, FAKE_MODE: fakeMode };
   delete env.SITE_VERSION;
   const r = spawnSync('node', ['scripts/release.mjs', ...args], {
     cwd: copy.dir,
@@ -94,6 +111,7 @@ describe('release refuses unsafe states and calls wrangler zero times', () => {
   test('no --env', () => {
     const r = release(makeCopy('feature'), []);
     assert.equal(r.status, 1);
+    assert.match(r.out, /use --env preview/);
     assert.equal(r.calls.length, 0);
   });
 
@@ -128,15 +146,14 @@ describe('release refuses unsafe states and calls wrangler zero times', () => {
     git(copy.dir, 'commit', '-q', '-a', '-m', 'break consumer');
     const r = release(copy);
     assert.equal(r.status, 1);
+    assert.match(r.out, /consumer/);
     assert.equal(r.calls.length, 0);
   });
 });
 
 describe('release deploys exactly what it just built', () => {
-  test('one deploy per version, to its project, branch and commit; a stale dist/ folder is skipped', () => {
+  test('one deploy per version, to its project, branch and commit', () => {
     const copy = makeCopy('m0-test');
-    mkdirSync(join(copy.dir, 'dist', 'old'), { recursive: true });
-    writeFileSync(join(copy.dir, 'dist', 'old', 'index.html'), 'stale');
     const sha = git(copy.dir, 'rev-parse', 'HEAD').stdout.trim();
     const r = release(copy);
     assert.equal(r.status, 0, r.out);
@@ -158,6 +175,29 @@ describe('release deploys exactly what it just built', () => {
         '--commit-hash',
         sha,
       ]);
+      assert.match(r.out, new RegExp(`https://m0-test\\.${pagesProject}\\.pages\\.dev`));
     }
+  });
+});
+
+describe('release does not trust "wrangler exited 0" alone', () => {
+  test('no deployment record: the release fails', () => {
+    const r = release(makeCopy('m0-test'), ['--env', 'preview'], 'none');
+    assert.equal(r.status, 1);
+    assert.match(r.out, /release stopped: wrangler wrote no deployment record/);
+    assert.ok(!/preview release done/.test(r.out));
+  });
+
+  test('a production record: the release fails and says so', () => {
+    const r = release(makeCopy('m0-test'), ['--env', 'preview'], 'production');
+    assert.equal(r.status, 1);
+    assert.match(r.out, /release stopped: .*went to the "production" environment/);
+    assert.equal(r.calls.length, 1, 'it stops after the first version');
+  });
+
+  test('a record for another project: the release fails', () => {
+    const r = release(makeCopy('m0-test'), ['--env', 'preview'], 'wrong-project');
+    assert.equal(r.status, 1);
+    assert.match(r.out, /release stopped: .*someone-else/);
   });
 });

@@ -15,6 +15,9 @@ const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 const WRANGLER = process.env.WRANGLER_BIN ?? join(ROOT, 'node_modules', '.bin', 'wrangler');
 const FIXTURE = join(ROOT, 'tests', 'fixtures', 'pages-a07');
 const FIXTURE_BRANCH = 'tc-a07-fixture';
+if (process.env.PREVIEW_BRANCH === FIXTURE_BRANCH) {
+  throw new Error(`PREVIEW_BRANCH must not be ${FIXTURE_BRANCH}: the fixture test overwrites it.`);
+}
 
 const versions = listVersions().map((id) => loadVersion(id));
 const branch =
@@ -38,7 +41,17 @@ async function get(url, tries = 6) {
   throw new Error(`${url}: no answer after ${tries} tries (${last?.cause?.code ?? last})`);
 }
 
-const alias = (b, project) => `https://${b}.${project}.pages.dev`;
+// Cloudflare turns a branch name into a host label: lowercase, other characters become "-".
+// It also shortens long names. The limit below is the documented one; a branch longer than
+// this may need PREVIEW_BRANCH set by hand.
+const MAX_ALIAS = 28;
+const aliasLabel = (b) =>
+  b
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, MAX_ALIAS);
+const alias = (b, project) => `https://${aliasLabel(b)}.${project}.pages.dev`;
 const hasNoindex = (headers) => /noindex/i.test(headers.get('x-robots-tag') ?? '');
 
 /** Project name → address, read from wrangler's JSON list. */
@@ -48,8 +61,15 @@ function liveProjects() {
     encoding: 'utf8',
   });
   assert.equal(r.status, 0, `wrangler could not list projects:\n${r.stdout}${r.stderr}`);
-  const rows = JSON.parse(r.stdout.slice(r.stdout.indexOf('[')));
-  return new Map(rows.map((row) => [row['Project Name'] ?? row.name, row['Project Domains']]));
+  // The JSON is on stdout. A banner line may come first, so start at the first line with "[".
+  const lines = r.stdout.split('\n');
+  const rows = JSON.parse(lines.slice(lines.findIndex((l) => l.startsWith('['))).join('\n'));
+  return new Map(
+    rows.map((row) => {
+      const domains = row['Project Domains'] ?? row.subdomain;
+      return [row['Project Name'] ?? row.name, Array.isArray(domains) ? domains[0] : domains];
+    }),
+  );
 }
 
 /** Every page in a build folder → its clean address path. 404.html is left out. */
@@ -86,6 +106,8 @@ describe('TC-K06: both Pages projects exist under the names in version.json', ()
   });
 });
 
+// The noindex header here comes from Cloudflare's own default for preview addresses. Our
+// _headers file is a stub until ENG-23. If Cloudflare changes that default, this test fails.
 describe('TC-E05: preview addresses send X-Robots-Tag: noindex', () => {
   for (const v of versions) {
     test(`${v.id}: ${branch} alias`, async () => {

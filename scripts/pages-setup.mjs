@@ -1,9 +1,10 @@
-// Creates the Cloudflare Pages project for every version, if it does not exist yet (V1, ENG-05).
-// Safe to run again: a project that exists is left alone.
-// If the planned name is taken, it tries "<name>-gupta" and writes the new name and address
-// into that version's version.json. Aditya records any such change.
+// Creates the Cloudflare Pages project for every version that has none yet (V1, ENG-05).
+// Safe to run again. A project that exists is left alone.
+// If Cloudflare refuses the planned name, the script stops. Pick a new name by hand, or run it
+// with --allow-fallback. It then tries "<name>-gupta" and writes the new name and address into
+// that version's version.json. Aditya records the change in the build plan.
 //
-// Usage: node scripts/pages-setup.mjs
+// Usage: node scripts/pages-setup.mjs [--allow-fallback]
 import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,30 +14,32 @@ import { listVersions, loadVersion, VersionError } from '../versions/load.mjs';
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const WRANGLER = process.env.WRANGLER_BIN ?? join(ROOT, 'node_modules', '.bin', 'wrangler');
 const FALLBACK_SUFFIX = '-gupta';
+const allowFallback = process.argv.includes('--allow-fallback');
 
 function wrangler(args) {
   const r = spawnSync(WRANGLER, args, { cwd: ROOT, encoding: 'utf8' });
-  return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
+  return { status: r.status, stdout: r.stdout ?? '', out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 }
 
 /** Project name → its "<sub>.pages.dev" address, for every project in the account. */
 function listProjects() {
   const r = wrangler(['pages', 'project', 'list', '--json']);
   if (r.status !== 0) throw new Error(`wrangler could not list projects:\n${r.out}`);
-  const start = r.out.indexOf('[');
-  const rows = JSON.parse(r.out.slice(start));
+  // The JSON is on stdout. A banner line may come first, so start at the first line with "[".
+  const lines = r.stdout.split('\n');
+  const first = lines.findIndex((l) => l.startsWith('['));
+  if (first === -1) throw new Error(`wrangler gave no project list:\n${r.out}`);
   const projects = new Map();
-  for (const row of rows) {
-    const name = row.name ?? row['Project Name'];
+  for (const row of JSON.parse(lines.slice(first).join('\n'))) {
     const domains = row.subdomain ?? row['Project Domains'];
-    projects.set(name, Array.isArray(domains) ? domains[0] : domains);
+    projects.set(row.name ?? row['Project Name'], Array.isArray(domains) ? domains[0] : domains);
   }
   return projects;
 }
 
 function create(name) {
   console.log(`  creating ${name} (production branch: main)`);
-  // --force keeps classic Pages: without it, Wrangler 4.156.1 hands the command to the Workers
+  // --force keeps classic Pages. Without it, Wrangler 4.156.1 hands the command to the Workers
   // flow, which fails here (D72). The flag is not in `--help`.
   return wrangler(['pages', 'project', 'create', name, '--production-branch', 'main', '--force']);
 }
@@ -51,32 +54,39 @@ try {
   for (const s of settings) {
     console.log(`\n▶ ${s.id}: ${s.pagesProject}`);
     let name = s.pagesProject;
-    if (!projects.has(name)) {
+    if (projects.has(name)) {
+      console.log('  already exists');
+    } else {
       let r = create(name);
-      if (r.status !== 0 && /already|taken|exists/i.test(r.out)) {
+      if (r.status !== 0 && allowFallback) {
         name = `${name}${FALLBACK_SUFFIX}`;
-        console.log(`  name is taken; trying ${name}`);
+        console.log(`  create failed; --allow-fallback is set, so trying ${name}`);
         r = create(name);
       }
-      if (r.status !== 0) throw new Error(`wrangler could not create ${name}:\n${r.out}`);
+      if (r.status !== 0) {
+        throw new Error(
+          `wrangler could not create ${name}:\n${r.out}\n` +
+            'If the name is taken, pick another name or run with --allow-fallback.',
+        );
+      }
       projects = listProjects();
-    } else {
-      console.log('  already exists');
     }
 
-    // Cloudflare can add a suffix to the address when the subdomain is taken. Read the real one.
     const domain = projects.get(name);
     if (!domain) throw new Error(`${name}: project not found after create`);
     const siteUrl = `https://${domain}`;
-    if (name !== s.pagesProject || siteUrl !== s.siteUrl) {
+    if (name !== s.pagesProject) {
+      // Only the fallback path changes version.json.
       const file = join(s.dir, 'version.json');
       const json = JSON.parse(readFileSync(file, 'utf8'));
       json.pagesProject = name;
       json.siteUrl = siteUrl;
       writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
-      changes.push(
-        `${s.id}: pagesProject ${s.pagesProject} → ${name}, siteUrl ${s.siteUrl} → ${siteUrl}`,
-      );
+      changes.push(`${s.id}: ${s.pagesProject} → ${name}, ${s.siteUrl} → ${siteUrl}`);
+    } else if (siteUrl !== s.siteUrl) {
+      // Cloudflare adds a suffix when the subdomain is taken. The canonical address is public,
+      // so a person decides what to do.
+      throw new Error(`${s.id}: Cloudflare address is ${siteUrl}, but siteUrl says ${s.siteUrl}.`);
     }
     console.log(`  ✓ ${name} → ${siteUrl}`);
   }

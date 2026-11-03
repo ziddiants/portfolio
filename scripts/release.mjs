@@ -34,25 +34,26 @@ function envArg(argv) {
   return i === -1 ? undefined : argv[i + 1];
 }
 
-/** Deployment and branch addresses from the lines wrangler wrote to its output file. */
-function addresses(outputFile) {
-  const urls = new Set();
+/** The deployment record Wrangler wrote to its output file, or undefined if there is none. */
+function deployRecord(outputFile) {
   let text = '';
   try {
     text = readFileSync(outputFile, 'utf8');
   } catch {
-    return [];
+    return undefined;
   }
   for (const line of text.split('\n').filter(Boolean)) {
     try {
       const entry = JSON.parse(line);
-      for (const key of ['url', 'alias']) if (entry[key]) urls.add(entry[key]);
+      if (entry.type === 'pages-deploy-detailed' && entry.url) return entry;
     } catch {
-      // A line that is not JSON is not an address.
+      // A line that is not JSON is not a record.
     }
   }
-  return [...urls];
+  return undefined;
 }
+
+if (process.env.WRANGLER_BIN) console.log(`note: WRANGLER_BIN is set. Deploying with ${WRANGLER}`);
 
 const env = envArg(process.argv.slice(2));
 if (env === 'production') stop('production releases are not available until ENG-30.');
@@ -115,7 +116,16 @@ try {
       );
     }
     deployed.push(s.id);
-    for (const url of addresses(outputFile)) console.log(`  ✓ ${url}`);
+    // Never trust "wrangler exited 0" alone: the record must exist and must say "preview".
+    const record = deployRecord(outputFile);
+    if (!record) stop(`wrangler wrote no deployment record for ${s.id}. Check the deploy by hand.`);
+    if (record.environment !== 'preview' || record.pages_project !== s.pagesProject) {
+      stop(
+        `${s.id} went to the "${record.environment}" environment of ${record.pages_project}. ` +
+          `Expected "preview" of ${s.pagesProject}. If this is production, roll it back now.`,
+      );
+    }
+    for (const url of [record.url, record.alias]) if (url) console.log(`  ✓ ${url}`);
   }
 } finally {
   rmSync(tmp, { recursive: true, force: true });
