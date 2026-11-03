@@ -18,6 +18,9 @@ try {
 export default defineConfig({
   output: 'static',
   site: v.siteUrl,
+  // /work/x is served from work/x.html with no trailing slash (ERD § Routes, TC-A07).
+  build: { format: 'file' },
+  trailingSlash: 'never',
   publicDir: `.build/public-${v.id}`,
   outDir: `dist/${v.id}`,
   integrations: v.indexable ? [sitemap()] : [],
