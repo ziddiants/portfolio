@@ -1,0 +1,2 @@
+# gitleaks allow-list (VF-16): one fingerprint per line, as printed by `npm run verify`.
+# Each entry names one file, one rule and one line. Add a comment above it saying why.

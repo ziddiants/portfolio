@@ -5,6 +5,7 @@ import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import {
+  appendFileSync,
   cpSync,
   existsSync,
   lstatSync,
@@ -37,6 +38,16 @@ function makeCopy() {
   copies.push(dir);
   for (const file of FILES) cpSync(join(REPO, file), join(dir, file));
   symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  // VF-16 and VF-06 read git, so the copy must be a real repository. A symlink is not matched by
+  // the "node_modules/" rule in .gitignore, so it is excluded by hand.
+  const git = (...args) =>
+    spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {
+      cwd: dir,
+    });
+  git('init', '-q', '-b', 'main');
+  appendFileSync(join(dir, '.git', 'info', 'exclude'), 'node_modules\ndist\n.build\n');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'test copy');
   return dir;
 }
 
@@ -103,16 +114,16 @@ describe('a full build', () => {
     assert.equal(result.status, 0, result.out);
     for (const id of ['payments', 'consumer']) {
       assert.ok(existsSync(join(dir, 'dist', id, 'index.html')), `dist/${id}/index.html`);
-      // D70: the verify step must have run on this version (the stub says so out loud).
-      assert.match(result.out, new RegExp(`verify: STUB — 0 rules ran on dist/${id} `));
+      // The verify step must have run on this version, with real rules (D70 ended at ENG-06).
+      assert.match(result.out, new RegExp(`verify: 2 rules passed on dist/${id}\\b`));
     }
     assert.deepEqual(readdirSync(join(dir, 'dist')).sort(), ['consumer', 'payments']);
-    // The last line must not claim a real verify pass while the stub runs (review fix).
+    // The last line says what ran: all rules that exist, and how many are still to come (ENG-07).
     assert.match(
       result.out,
-      /✓ built: consumer, payments\. Verify is a stub: 0 rules ran \(D70\)\./,
+      /✓ built and verified: consumer, payments\. 2 of 16 verify rules exist; ENG-07 adds the rest\./,
     );
-    assert.doesNotMatch(result.out, /verified/);
+    assert.doesNotMatch(result.out, /STUB|stub/);
   });
 
   test('each build holds its own résumé and preview image under the shared names (L1)', () => {
@@ -306,7 +317,7 @@ describe('the verify gate can fail (past mistake: a gate that fails silently)', 
     assert.ok(!existsSync(join(dir, 'dist', 'payments')), 'the next version was not built');
   });
 
-  test('the stub fails when there is no build folder', () => {
+  test('verify fails when there is no build folder', () => {
     const r = run(REPO, ['node', 'scripts/verify/index.mjs', 'dist/does-not-exist']);
     assert.equal(r.status, 1);
     assert.match(r.out, /verify: no build folder at dist\/does-not-exist/);

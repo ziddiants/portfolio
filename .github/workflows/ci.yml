@@ -1,0 +1,55 @@
+# CI (ENG-06, N11). Runs the same gates as a local build, without the private folder.
+# VF-02 and VF-05 report "skipped" here. Every other rule must pass (verify:ci).
+# Not run here: tests/pages (they need Aditya's Cloudflare login).
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERIFY_MODE: ci
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      # Actions are pinned to a full commit SHA, so a moved tag cannot change what runs.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # VF-16 scans the whole git history
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install gitleaks (pinned version, checked against a pinned SHA-256)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm gitleaks.tar.gz gitleaks
+          gitleaks version
+
+      - run: npm ci
+      - run: git config core.hooksPath .githooks
+
+      - run: npm run format:check
+      - run: npm run check
+      - name: Build and verify every version
+        run: npm run build
+      - run: npm run verify:ci
+      - run: npm run test:unit
+      - run: npm run test:versions
+      - run: npm run test:static
+      - run: npm run test:release
+      - run: npm run test:precommit

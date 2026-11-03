@@ -4,7 +4,7 @@
 // Usage: node scripts/build-all.mjs          every version (empties dist/ first)
 //        node scripts/build-all.mjs <id>     one version
 import { spawnSync } from 'node:child_process';
-import { rmSync } from 'node:fs';
+import { readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { listVersions, loadVersion, VersionError } from '../versions/load.mjs';
@@ -12,6 +12,7 @@ import { assemblePublic } from './assemble-public.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const ASTRO = join(ROOT, 'node_modules', '.bin', 'astro');
+const TOTAL_RULES = 16; // ERD § Guardrails: the verify rules
 
 function run(step, id, command, args) {
   console.log(`\n▶ ${id}: ${step}`);
@@ -47,8 +48,14 @@ try {
       `dist/${id}`,
     ]);
   }
-  // D70: verify is a stub until ENG-06/07. ENG-06 changes this line back to "built and verified".
-  console.log(`\n✓ built: ${ids.join(', ')}. Verify is a stub: 0 rules ran (D70).`);
+  const ruleCount = readdirSync(join(ROOT, 'scripts', 'verify', 'rules')).filter((f) =>
+    f.endsWith('.mjs'),
+  ).length;
+  const gap =
+    ruleCount < TOTAL_RULES
+      ? ` ${ruleCount} of ${TOTAL_RULES} verify rules exist; ENG-07 adds the rest.`
+      : '';
+  console.log(`\n✓ built and verified: ${ids.join(', ')}.${gap}`);
 } catch (err) {
   if (!(err instanceof VersionError)) throw err;
   console.error(err.message);

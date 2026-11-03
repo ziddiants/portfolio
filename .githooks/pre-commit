@@ -1,53 +1,18 @@
 #!/usr/bin/env bash
-# pre-commit — VF-06: keep private files out of the public repo (ENG-02, N10/N12).
+# pre-commit — VF-06 (private files) and VF-16 (secrets) on the staged files (ENG-02, ENG-06).
 #
-# Blocks the commit if any staged path is:
-#   - an internal document (PRD, ERD, build plan, design doc, content sources…)
-#   - the teammate names list (names.txt) or anything under private/
-#   - a .env file, anything under .inputs/, or a *.private.* file
+# The rules live in scripts/verify/rules/ and run through the same runner as `npm run verify`,
+# so the hook and the build use one list. This hook fails closed: if it cannot run, the commit
+# is blocked.
 #
-# This is the first of two layers (.gitignore is the other). Secret scanning
-# with gitleaks (VF-16) is added to this hook at ENG-06.
+# Layer one is this hook. Layer two is .gitignore (N10/N12).
 
 set -uo pipefail
+cd "$(git rev-parse --show-toplevel)" || exit 1
 
-# Staged files that are being added, copied or modified.
-staged=$(git diff --cached --name-only --diff-filter=ACM)
-[ -z "$staged" ] && exit 0
-
-patterns=(
-  '(^|/)\.env($|\.)'
-  '(^|/)\.inputs/'
-  '(^|/)names\.txt$'
-  '(^|/)private/'
-  '\.private\.'
-  '(^|/)(PRD|PRD-Brief|Architecture|design-brand|build-plan|content-sources|content-pack|alignment-audit)\.md$'
-  '(^|/)Past Mistakes and Lessons\.md$'
-  '(^|/)project-CLAUDE\.md$'
-)
-
-blocked=()
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  for p in "${patterns[@]}"; do
-    if printf '%s' "$f" | grep -Eiq "$p"; then
-      blocked+=("$f")
-      break
-    fi
-  done
-done <<< "$staged"
-
-if [ "${#blocked[@]}" -gt 0 ]; then
-  {
-    echo ""
-    echo "  ✗ commit blocked — private files must never enter the public repo (VF-06, N10/N12):"
-    for f in "${blocked[@]}"; do echo "      - $f"; done
-    echo ""
-    echo "  fix: unstage them with 'git restore --staged <file>'."
-    echo "       Private docs live in the vault ~/my_builds/portfolio, not in this repo."
-    echo ""
-  } >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "  ✗ commit blocked: node is not installed, so the private-file and secret checks cannot run" >&2
   exit 1
 fi
 
-exit 0
+exec node scripts/verify/precommit.mjs

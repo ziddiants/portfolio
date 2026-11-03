@@ -26,7 +26,10 @@
     "pages:setup": "node scripts/pages-setup.mjs",
     "release": "node scripts/release.mjs",
     "test:release": "node --test 'tests/release/*.test.mjs'",
-    "test:pages": "node --test 'tests/pages/*.test.mjs'"
+    "test:pages": "node --test 'tests/pages/*.test.mjs'",
+    "verify": "node scripts/verify/index.mjs",
+    "verify:ci": "node scripts/verify/index.mjs --ci",
+    "test:unit": "vitest run"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.4",
@@ -37,6 +40,7 @@
     "prettier": "3.9.10",
     "prettier-plugin-astro": "1.1.2",
     "typescript": "6.0.3",
+    "vitest": "5.0.5",
     "wrangler": "4.156.1"
   }
 }
