@@ -9,6 +9,22 @@
   },
   "scripts": {
     "doctor": "node scripts/doctor.mjs",
-    "test:precommit": "bash tests/precommit.test.sh"
+    "dev": "astro dev",
+    "check": "astro check",
+    "build": "astro check && astro build",
+    "preview": "astro preview",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test:precommit": "bash tests/precommit.test.sh",
+    "test:static": "bash tests/static-output.test.sh"
+  },
+  "dependencies": {
+    "astro": "7.4.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "prettier": "3.9.10",
+    "prettier-plugin-astro": "1.1.2",
+    "typescript": "6.0.3"
   }
 }

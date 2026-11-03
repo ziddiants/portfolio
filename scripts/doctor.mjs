@@ -44,7 +44,13 @@ function gte(a, b) {
 
 // --- Tools -----------------------------------------------------------------
 const tools = [
-  { name: 'node', cmd: 'node', args: ['--version'], min: [22, 23, 4], fix: 'Install Node 24 (nvm install 24) — see .nvmrc' },
+  {
+    name: 'node',
+    cmd: 'node',
+    args: ['--version'],
+    min: [22, 23, 4],
+    fix: 'Install Node 24 (nvm install 24) — see .nvmrc',
+  },
   { name: 'npm', cmd: 'npm', args: ['--version'], fix: 'Ships with Node; reinstall Node' },
   { name: 'git', cmd: 'git', args: ['--version'], fix: 'xcode-select --install' },
   { name: 'gh', cmd: 'gh', args: ['--version'], fix: 'brew install gh' },
@@ -53,7 +59,12 @@ const tools = [
   { name: 'exiftool', cmd: 'exiftool', args: ['-ver'], fix: 'brew install exiftool' },
   { name: 'qpdf', cmd: 'qpdf', args: ['--version'], fix: 'brew install qpdf' },
   { name: 'gitleaks', cmd: 'gitleaks', args: ['version'], fix: 'brew install gitleaks' },
-  { name: 'LibreOffice (soffice)', cmd: 'soffice', args: ['--version'], fix: 'brew install --cask libreoffice' },
+  {
+    name: 'LibreOffice (soffice)',
+    cmd: 'soffice',
+    args: ['--version'],
+    fix: 'brew install --cask libreoffice',
+  },
 ];
 
 for (const t of tools) {
@@ -78,7 +89,9 @@ const gh = spawnSync('gh', ['auth', 'status'], { encoding: 'utf8', timeout: 1500
 if (gh.error && gh.error.code === 'ENOENT') {
   add('gh login', 'fail', 'gh not installed', 'brew install gh && gh auth login');
 } else if (gh.status === 0) {
-  const acct = firstLine((`${gh.stdout || ''}${gh.stderr || ''}`.match(/account\s+(\S+)/i) || [])[1] || 'active');
+  const acct = firstLine(
+    (`${gh.stdout || ''}${gh.stderr || ''}`.match(/account\s+(\S+)/i) || [])[1] || 'active',
+  );
   add('gh login', 'ok', acct === 'active' ? 'logged in' : `logged in (${acct})`);
 } else {
   add('gh login', 'fail', 'not logged in', 'gh auth login');
@@ -106,7 +119,12 @@ try {
   const cfg = fs.readFileSync(cfgPath, 'utf8');
   const m = cfg.match(/^\s*vault_path:\s*(.+?)\s*$/m);
   if (!m) {
-    add('vault symlink', 'fail', 'vault_path not set in ~/.shipstack/config.yaml', 'Add vault_path: ~/ProductBrain/Projects');
+    add(
+      'vault symlink',
+      'fail',
+      'vault_path not set in ~/.shipstack/config.yaml',
+      'Add vault_path: ~/ProductBrain/Projects',
+    );
   } else {
     const vaultPath = expandTilde(m[1].replace(/['"]/g, '').trim());
     const linkPath = path.join(vaultPath, 'portfolio');
@@ -115,23 +133,41 @@ try {
     if (actual === fs.realpathSync(expected)) {
       add('vault symlink', 'ok', `${linkPath} -> ${actual}`);
     } else {
-      add('vault symlink', 'fail', `resolves to ${actual}, expected ${expected}`, `ln -s ${expected} ${linkPath}`);
+      add(
+        'vault symlink',
+        'fail',
+        `resolves to ${actual}, expected ${expected}`,
+        `ln -s ${expected} ${linkPath}`,
+      );
     }
   }
 } catch (e) {
-  add('vault symlink', 'fail', e.message, 'Create the symlink: ln -s ~/my_builds/portfolio ~/ProductBrain/Projects/portfolio');
+  add(
+    'vault symlink',
+    'fail',
+    e.message,
+    'Create the symlink: ln -s ~/my_builds/portfolio ~/ProductBrain/Projects/portfolio',
+  );
 }
 
 // --- Playwright browsers (warn only — needed by M4, ENG-25) ----------------
 const pwCache = path.join(HOME, 'Library', 'Caches', 'ms-playwright');
 let pwReady = false;
 try {
-  pwReady = fs.existsSync(pwCache) && fs.readdirSync(pwCache).some((d) => /chromium|firefox|webkit/i.test(d));
+  pwReady =
+    fs.existsSync(pwCache) &&
+    fs.readdirSync(pwCache).some((d) => /chromium|firefox|webkit/i.test(d));
 } catch {
   pwReady = false;
 }
 if (pwReady) add('Playwright browsers', 'ok', 'installed');
-else add('Playwright browsers', 'warn', 'not installed — needed by M4', 'At M4: npx playwright install');
+else
+  add(
+    'Playwright browsers',
+    'warn',
+    'not installed — needed by M4',
+    'At M4: npx playwright install',
+  );
 
 // --- Report ----------------------------------------------------------------
 const sym = { ok: green('✓'), fail: red('✗'), warn: yellow('⚠') };
@@ -147,9 +183,13 @@ const fails = results.filter((r) => r.status === 'fail');
 const warns = results.filter((r) => r.status === 'warn');
 console.log('');
 if (fails.length === 0) {
-  console.log(`  ${green('All green.')}${warns.length ? yellow(`  (${warns.length} warning${warns.length > 1 ? 's' : ''})`) : ''}\n`);
+  console.log(
+    `  ${green('All green.')}${warns.length ? yellow(`  (${warns.length} warning${warns.length > 1 ? 's' : ''})`) : ''}\n`,
+  );
   process.exit(0);
 } else {
-  console.log(`  ${red(`${fails.length} check${fails.length > 1 ? 's' : ''} failed.`)} Fix the lines above, then re-run ${dim('npm run doctor')}.\n`);
+  console.log(
+    `  ${red(`${fails.length} check${fails.length > 1 ? 's' : ''} failed.`)} Fix the lines above, then re-run ${dim('npm run doctor')}.\n`,
+  );
   process.exit(1);
 }

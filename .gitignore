@@ -1,6 +1,7 @@
 # Build output
 dist/
 .build/
+.astro/
 
 # Raw inputs — private source files (DOCX, PDFs) placed for processing
 .inputs/
