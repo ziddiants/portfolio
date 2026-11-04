@@ -1,0 +1,4 @@
+# These files are the checks themselves. A change to them needs the owner's review.
+/.gitleaksignore @ziddiants
+/scripts/verify/ @ziddiants
+/.github/ @ziddiants
