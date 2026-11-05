@@ -176,8 +176,10 @@ export function hostOf(url) {
 }
 
 /**
- * The allowlist (scripts/pdf/allow.json): link domains and exact email addresses that may stay
- * in a published PDF. It is the one reviewed place for exceptions; there is no inline skip.
+ * The allowlist (scripts/pdf/allow.json): link domains (subdomains included), exact links, and
+ * exact email addresses that may stay in a published PDF. It is the one reviewed place for
+ * exceptions; there is no inline skip. A host with user content (a Google Doc, a Claude chat)
+ * goes in `urls`, never in `domains`: a whole domain would let any private doc through (D87).
  */
 export function loadAllow(file) {
   const raw = JSON.parse(readFileSync(file, 'utf8'));
@@ -191,7 +193,13 @@ export function loadAllow(file) {
     }
     return v;
   };
-  const allow = { domains: list('domains'), emails: list('emails') };
+  const allow = { domains: list('domains'), emails: list('emails'), urls: raw.urls ?? [] };
+  if (
+    !Array.isArray(allow.urls) ||
+    allow.urls.some((u) => typeof u !== 'string' || !/^https:\/\/[^\s/]+\/\S*$/.test(u))
+  ) {
+    throw new Error(`${file}: "urls" must be a list of full https:// links with no spaces`);
+  }
   const bad = allow.domains.find((d) => d.includes('/') || d.includes(':'));
   if (bad !== undefined)
     throw new Error(`${file}: "${bad}" must be a bare domain, without a scheme or a path`);
@@ -200,6 +208,10 @@ export function loadAllow(file) {
 
 const domainAllowed = (host, allow) =>
   isReserved(host) || allow.domains.some((d) => under(host, d));
+// A link passes when its domain is allowed, or when it is one of the exact links. A link found
+// in the text can end in a full stop or a comma from the sentence; that does not count.
+const linkAllowed = (url, allow) =>
+  domainAllowed(hostOf(url), allow) || allow.urls.includes(url.replace(/[.,;:!?]+$/, ''));
 
 // ── Step 5: the "we" rule ───────────────────────────────────────────────────────────────────
 
@@ -341,7 +353,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
     }
     for (const m of text.matchAll(URL_IN_TEXT)) {
       const host = hostOf(m[0]);
-      if (domainAllowed(host, allow)) continue;
+      if (linkAllowed(m[0], allow)) continue;
       add(
         4,
         'link',
@@ -374,7 +386,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
       scanText(url.replace(/^mailto:/i, '').split('?')[0], page);
     } else if (/^https?:\/\//i.test(url)) {
       const host = hostOf(url);
-      if (!domainAllowed(host, allow)) {
+      if (!linkAllowed(url, allow)) {
         add(
           4,
           'link',

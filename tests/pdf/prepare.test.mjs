@@ -104,7 +104,10 @@ describe('the clean case', () => {
 
   test('the real allowlist loads', () => {
     const allow = loadAllow(new URL('../../scripts/pdf/allow.json', import.meta.url));
-    expect(Object.keys(allow)).toEqual(['domains', 'emails']);
+    expect(Object.keys(allow)).toEqual(['domains', 'emails', 'urls']);
+    // D87: hosts with user content are allowed by exact link only, never as a whole domain.
+    expect(allow.domains).not.toContain('docs.google.com');
+    expect(allow.domains).not.toContain('claude.ai');
   });
 });
 
@@ -307,6 +310,24 @@ describe('step 4: email addresses and links', () => {
     expect(ok.findings).toEqual([]);
     const bad = run({ files: vendrax({ text: `${CLEAN} https://evilgov.zz/a` }), allow });
     expect(ids(bad.findings)).toEqual(['4/link Vendrax.pdf p1']);
+  });
+
+  describe('exact links (D87)', () => {
+    const DOC = 'https://docs.example.zz/document/d/abc123/edit?usp=sharing';
+    const allow = { domains: [], emails: [], urls: [DOC] };
+
+    test('an exact link passes, as an annotation and in the text (with a full stop)', () => {
+      const files = vendrax({ text: `${CLEAN} See ${DOC}.`, links: [DOC] });
+      expect(run({ files, allow }).findings).toEqual([]);
+    });
+
+    test.each([
+      ['another doc on the same host', 'https://docs.example.zz/document/d/other/edit'],
+      ['the same doc with a longer path', `${DOC}&x=1`],
+    ])('%s stops the run', (_, url) => {
+      const files = vendrax({ text: CLEAN, links: [url] });
+      expect(ids(run({ files, allow }).findings)).toEqual(['4/link Vendrax.pdf p1']);
+    });
   });
 
   test('a javascript: link stops the run', () => {
@@ -864,6 +885,12 @@ describe('the allowlist file', () => {
     [{ domains: ['Example.zz'], emails: [] }, /"domains" must be a list of lower-case strings/],
     [{ domains: ['https://x.zz'], emails: [] }, /must be a bare domain/],
     [{ domains: ['x.zz/path'], emails: [] }, /must be a bare domain/],
+    [{ domains: [], emails: [], urls: ['http://x.zz/a'] }, /"urls" must be a list of full https/],
+    [
+      { domains: [], emails: [], urls: ['https://x.zz/a b'] },
+      /"urls" must be a list of full https/,
+    ],
+    [{ domains: [], emails: [], urls: 'https://x.zz/a' }, /"urls" must be a list of full https/],
   ])('a bad allowlist throws (%j)', (body, error) => {
     expect(() => loadAllow(file(body))).toThrow(error);
   });
