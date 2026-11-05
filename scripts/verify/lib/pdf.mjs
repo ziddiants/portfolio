@@ -59,6 +59,31 @@ export function pdfText(ctx, file) {
 }
 
 /**
+ * The text layer split into pages (index 0 is page 1), for findings that name a page. It checks
+ * the text layer first, so a PDF with no text throws here too.
+ */
+export function pdfPages(ctx, file) {
+  return memo(ctx, `pdfpages:${file}`, () => {
+    pdfText(ctx, file);
+    const text = tool('pdftotext', ['-enc', 'UTF-8', abs(ctx, file), '-']);
+    return text
+      .replace(/\f$/, '')
+      .split('\f')
+      .map((page) => page.replace(/-\n(?=\w)/g, ''));
+  });
+}
+
+/** How many embedded files (attachments) the PDF holds, read with pdfdetach. */
+export function pdfAttachments(ctx, file) {
+  return memo(ctx, `pdfdetach:${file}`, () => {
+    const first = tool('pdfdetach', ['-list', abs(ctx, file)]).split('\n')[0];
+    const m = /^(\d+) embedded files?/.exec(first);
+    if (!m) throw new Error(`pdfdetach printed an unknown first line for ${file}`);
+    return Number(m[1]);
+  });
+}
+
+/**
  * The document info fields as { key: value }, custom keys included (pdfinfo -custom). Plain
  * pdfinfo prints only "Custom Metadata: yes" for keys such as Company (review finding F2).
  */
@@ -77,15 +102,19 @@ export function pdfInfo(ctx, file) {
   });
 }
 
-/** Every URL in the PDF's objects (link annotations): a tel: link has no visible text. */
-export const pdfUrls = (ctx, file) =>
-  memo(ctx, `pdfurls:${file}`, () =>
+/** Every link in the PDF's objects as { page, url }: a tel: link has no visible text. */
+export const pdfLinks = (ctx, file) =>
+  memo(ctx, `pdflinks:${file}`, () =>
     tool('pdfinfo', ['-url', abs(ctx, file)])
       .split('\n')
       .slice(1)
-      .map((l) => l.trim().split(/\s+/).slice(2).join(' '))
-      .filter(Boolean),
+      .map((l) => l.trim().split(/\s+/))
+      .map((parts) => ({ page: Number(parts[0]), url: parts.slice(2).join(' ') }))
+      .filter((l) => l.url),
   );
+
+/** Every URL in the PDF's objects (link annotations). */
+export const pdfUrls = (ctx, file) => pdfLinks(ctx, file).map((l) => l.url);
 
 /**
  * The file's raw bytes plus every stream that inflates, as text (one character per byte). XMP can

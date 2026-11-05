@@ -40,14 +40,24 @@ export function phoneKind(raw) {
 
 const mask = (raw) => raw.replace(/\d(?=(?:\D*\d){2})/g, '•');
 
-function scan(file, raw, out) {
+/**
+ * Every phone number and tel: link in a text, as { key, message }. The message shows only the
+ * last two digits. The PDF pipeline (scripts/pdf/, ENG-08) uses it too.
+ */
+export function phonesIn(raw) {
   const text = clean(raw);
+  const out = [];
   for (const m of text.matchAll(CANDIDATE)) {
     const kind = phoneKind(m[0]);
     const key = m[0].replace(/\D/g, '').slice(-10);
-    if (kind) out.push({ file, key, message: `holds ${kind} (${mask(m[0].trim())})` });
+    if (kind) out.push({ key, message: `holds ${kind} (${mask(m[0].trim())})` });
   }
-  if (/\btel:/i.test(text)) out.push({ file, key: 'tel:', message: 'holds a tel: link' });
+  if (/\btel:/i.test(text)) out.push({ key: 'tel:', message: 'holds a tel: link' });
+  return out;
+}
+
+function scan(file, raw, out) {
+  for (const f of phonesIn(raw)) out.push({ file, ...f });
 }
 
 export default {

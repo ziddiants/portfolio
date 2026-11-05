@@ -20,6 +20,26 @@ export const key = (s) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
+/**
+ * The names.txt lines as matchers: `entries` ({ line, re }, tested against key(text)) and
+ * `unmatchable` (the line numbers of entries with no Latin letter or digit, which must fail
+ * closed). The PDF pipeline (scripts/pdf/, ENG-08) uses it too.
+ */
+export function nameMatchers(lines) {
+  const keyed = lines.map(({ text, line }) => ({ line, k: key(text) }));
+  return {
+    // An entry with no Latin letter or digit (a name in another script) cannot be matched.
+    // Dropping it would leave that name unchecked, so it fails closed instead.
+    unmatchable: keyed.filter((e) => !e.k).map((e) => e.line),
+    entries: keyed
+      .filter((e) => e.k)
+      .map(({ line, k }) => ({
+        line,
+        re: new RegExp(`(?<![a-z0-9])${escapeRegExp(k).replace(/ /g, ' ?')}(?![a-z0-9])`),
+      })),
+  };
+}
+
 export default {
   id: 'VF-02',
   title: 'Teammate names and team labels',
@@ -27,25 +47,12 @@ export default {
   needsPrivate: ['names.txt'],
   pendable: false, // a privacy rule: never on the pending list
   run(ctx) {
-    const lines = privateLines(ctx.privateDir, 'names.txt').map(({ text, line }) => ({
-      line,
-      k: key(text),
+    const { entries, unmatchable: bad } = nameMatchers(privateLines(ctx.privateDir, 'names.txt'));
+    const unmatchable = bad.map((line) => ({
+      check: 'names',
+      message: `names.txt line ${line} has no Latin letter or digit, so it cannot be checked`,
+      fix: 'write the name in Latin letters too (one spelling per line)',
     }));
-    // An entry with no Latin letter or digit (a name in another script) cannot be matched.
-    // Dropping it would leave that name unchecked, so it fails closed instead.
-    const unmatchable = lines
-      .filter((e) => !e.k)
-      .map((e) => ({
-        check: 'names',
-        message: `names.txt line ${e.line} has no Latin letter or digit, so it cannot be checked`,
-        fix: 'write the name in Latin letters too (one spelling per line)',
-      }));
-    const entries = lines
-      .filter((e) => e.k)
-      .map(({ line, k }) => ({
-        line,
-        re: new RegExp(`(?<![a-z0-9])${escapeRegExp(k).replace(/ /g, ' ?')}(?![a-z0-9])`),
-      }));
     if (entries.length === 0) {
       return [
         ...unmatchable,
