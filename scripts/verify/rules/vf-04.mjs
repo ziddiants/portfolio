@@ -9,7 +9,7 @@ import { pdfFiles, pdfInfo, pdfRaw } from '../lib/pdf.mjs';
 
 const FIELDS = ['Author', 'Creator', 'Subject', 'Keywords'];
 // Every line plain pdfinfo prints for itself. Any other key came from the file: a custom field.
-const STANDARD = new Set([
+export const STANDARD = new Set([
   'Title',
   'Subject',
   'Keywords',

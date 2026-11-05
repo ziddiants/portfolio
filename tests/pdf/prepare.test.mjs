@@ -1,7 +1,8 @@
-// The cohort PDF pipeline, steps 1–5 (ENG-08; ERD § Assets). Every input is made at test time in
+// The cohort PDF pipeline, steps 1–6 (ENG-08; ERD § Assets). Every input is made at test time in
 // a temp folder; the names are invented and are not on the real names list (D83). The real-file
 // run (TC-B04 on the real files) is local only, because .inputs/ is git-ignored.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
@@ -337,6 +338,144 @@ describe('step 5: the "we" rule', () => {
 
   test('sentences split at full stops, blank lines and bullets', () => {
     expect(sentences('One. Two\n\nThree • Four')).toEqual(['One.', 'Two', 'Three', 'Four']);
+  });
+});
+
+describe('step 6: clean metadata', () => {
+  const XMP =
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+    '<rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>Kelvaro Dunn</dc:creator>' +
+    '</rdf:Description></rdf:RDF></x:xmpmeta>';
+  const dirty = {
+    'NyaySetu_PRD.pdf': makePdf({
+      text: CLEAN,
+      info: { Author: 'Kelvaro Dunn', Creator: 'Zorvath Writer', Company: 'Quillmere Labs' },
+      xmp: XMP,
+    }),
+  };
+  const nyay = (r) => r.files.find((f) => f.id === 'NyaySetu');
+  const info = (file) => {
+    const out = spawnSync('pdfinfo', ['-custom', file], { encoding: 'utf8' }).stdout;
+    return Object.fromEntries(
+      [...out.matchAll(/^([A-Za-z][A-Za-z ]*?):\s*(.*)$/gm)].map((m) => [m[1], m[2]]),
+    );
+  };
+  const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+
+  /**
+   * Runs fn with a fake `name` tool first on PATH. The script sees $src and $dst, the last two
+   * arguments, so it does not depend on the flags before them.
+   */
+  function withFake(name, script, fn) {
+    const bin = tempDir('pdf-bin-');
+    writeFileSync(join(bin, name), `#!/bin/sh\nfor a; do src=$dst; dst=$a; done\n${script}\n`);
+    chmodSync(join(bin, name), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      return fn();
+    } finally {
+      process.env.PATH = path;
+    }
+  }
+
+  test('a clean file gets Title = project, Author = Aditya Gupta, and nothing else', () => {
+    const r = run({ files: dirty });
+    expect(r.findings).toEqual([]);
+    const after = info(nyay(r).clean);
+    expect([after.Title, after.Author]).toEqual(['NyaySetu', 'Aditya Gupta']);
+    expect(after.Creator).toBeUndefined();
+    expect(after.Company).toBeUndefined();
+    expect(r.files.map((f) => f.clean.split('/').slice(-2).join('/'))).toEqual([
+      'clean/Vendrax.pdf',
+      'clean/Skooling.pdf',
+      'clean/NyaySetu.pdf',
+    ]);
+  });
+
+  test('the old values and the XMP are gone from the bytes, not only from pdfinfo', () => {
+    const r = run({ files: dirty });
+    const before = readFileSync(nyay(r).path, 'latin1');
+    const after = readFileSync(nyay(r).clean, 'latin1');
+    // The control: the input holds every value, so a search that finds nothing proves something.
+    for (const s of ['Kelvaro', 'Zorvath', 'Quillmere', 'xmpmeta']) {
+      expect(before).toContain(s);
+      expect(after).not.toContain(s);
+    }
+  });
+
+  test('two runs give the same bytes (deterministic id, no new dates)', () => {
+    const a = run({ files: dirty });
+    const b = run({ files: dirty });
+    expect(a.files.map((f) => sha(f.clean))).toEqual(b.files.map((f) => sha(f.clean)));
+  });
+
+  test('XMP on a page object stops the run, and the message names no value', () => {
+    const r = run({ files: { 'Vendrax.pdf': makePdf({ text: CLEAN, pageXmp: XMP }) } });
+    expect(ids(r.findings)).toEqual(['6/xmp Vendrax.pdf']);
+    expect(r.findings[0].message).toBe('after cleaning, still holds XMP metadata');
+  });
+
+  test('step 6 does not run when a scan found something', () => {
+    const r = run({ files: vendrax({ text: `${CLEAN} Thanks to Kelvaro Dunn.` }) });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p1']);
+    expect(r.files.every((f) => f.clean === undefined)).toBe(true);
+  });
+
+  test('exiftool that exits 0 but writes nothing is a failure, not a pass', () => {
+    const r = withFake('exiftool', 'exit 0', () => run());
+    expect(r.findings.map((f) => f.message)).toEqual([
+      'exiftool did not clean the metadata (exit 0)',
+      'exiftool did not clean the metadata (exit 0)',
+      'exiftool did not clean the metadata (exit 0)',
+    ]);
+  });
+
+  test('qpdf exit 2 (errors) stops the run', () => {
+    const r = withFake('qpdf', 'cp "$src" "$dst"; echo "qpdf: damaged" >&2; exit 2', () => run());
+    expect(ids(r.findings)).toEqual([
+      '6/clean NyaySetu_PRD.pdf',
+      '6/clean Skooling-PRD.pdf',
+      '6/clean Vendrax.pdf',
+    ]);
+    expect(r.findings[0].message).toBe('qpdf did not rewrite the file (exit 2)');
+  });
+
+  test('qpdf exit 3 (warnings) is a note, and the checks still run on its output', () => {
+    const r = withFake(
+      'qpdf',
+      'cp "$src" "$dst"; echo "WARNING: x: object 3 0: dictionary has duplicated key" >&2; exit 3',
+      () => run(),
+    );
+    expect(r.findings).toEqual([]);
+    expect(r.notes.map((n) => `${n.file}: ${n.message}`)).toContain(
+      'Vendrax.pdf: qpdf repaired 1 problem(s) in the file (exit 3); the checks below ran on the result',
+    );
+  });
+
+  test('an old value left in an earlier revision stops the run (qpdf did not rewrite)', () => {
+    // A qpdf that copies its input keeps exiftool's appended revision, with the old Author in it.
+    // pdfinfo reads only the newest revision, so VF-04 passes; only the byte search sees it.
+    const files = { 'Vendrax.pdf': makePdf({ text: CLEAN, info: { Author: 'Kelvaro Dunn' } }) };
+    const r = withFake('qpdf', 'cp "$src" "$dst"', () => run({ files }));
+    expect(ids(r.findings)).toEqual(['6/clean Vendrax.pdf']);
+    expect(r.findings[0].message).toBe('still holds the old Author value in its bytes');
+    expect(JSON.stringify(r)).not.toMatch(/Kelvaro|Dunn/);
+  });
+
+  test('a page lost in the rewrite stops the run', () => {
+    const onePage = join(tempDir('pdf-one-'), 'one.pdf');
+    writeFileSync(onePage, makePdf({ text: CLEAN }));
+    process.env.FAKE_ONE_PAGE = onePage;
+    try {
+      const files = { 'Vendrax.pdf': makePdf({ text: `${CLEAN}\f${CLEAN}` }) };
+      const r = withFake('qpdf', 'cp "$FAKE_ONE_PAGE" "$dst"', () => run({ files }));
+      expect(r.findings.map((f) => `${f.file}: ${f.message}`)).toEqual([
+        'Vendrax.pdf: has 1 pages after cleaning, not 2',
+      ]);
+    } finally {
+      delete process.env.FAKE_ONE_PAGE;
+    }
   });
 });
 

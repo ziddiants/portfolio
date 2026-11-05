@@ -1,12 +1,21 @@
-// The cohort PDF pipeline, steps 1–5 (ENG-08; ERD § Assets, PDF pipeline). It reads the three
-// cohort files from .inputs/ (git-ignored), turns a DOCX into a PDF, and scans every PDF before
-// anything can be written to public/. Steps 6–9 (clean metadata, check size, write, image list)
-// come later in this ticket.
+// The cohort PDF pipeline, steps 1–6 (ENG-08; ERD § Assets, PDF pipeline). It reads the three
+// cohort files from .inputs/ (git-ignored), turns a DOCX into a PDF, scans every PDF, and cleans
+// its metadata before anything can be written to public/. Steps 7–9 (check size, write, image
+// list) come later in this ticket.
 //
 // A finding never prints what it protects: a name shows as its names.txt line, a phone number as
-// its last two digits, an email address or a link as its domain only.
+// its last two digits, an email address or a link as its domain only, a metadata value as its
+// field name only.
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, lstatSync, readdirSync, readFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { privateLines, privateState } from '../verify/lib/private.mjs';
@@ -21,6 +30,7 @@ import {
 import { fold, snippet } from '../verify/lib/text.mjs';
 import { phonesIn } from '../verify/rules/vf-01.mjs';
 import { key, nameMatchers } from '../verify/rules/vf-02.mjs';
+import vf04, { STANDARD } from '../verify/rules/vf-04.mjs';
 
 /** The three cohort files (build-plan line 288). Vendrax and Skooling may come as a DOCX (D86). */
 export const PROJECTS = [
@@ -419,11 +429,126 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
   return { findings, notes, pages: pages.length };
 }
 
+// ── Step 6: clean metadata ──────────────────────────────────────────────────────────────────
+
+export const AUTHOR = 'Aditya Gupta';
+
+/** Runs a system tool; a missing tool throws with the install line. */
+function tool(cmd, args, install) {
+  const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 180_000 });
+  if (r.error?.code === 'ENOENT') {
+    throw new Error(`${cmd} is not installed, so the metadata cannot be cleaned (${install})`);
+  }
+  return r;
+}
+
+/**
+ * Writes workDir/clean/<id>.pdf with Title <id>, Author "Aditya Gupta" and no other metadata.
+ * exiftool removes every tag and writes the two fields into the Info dictionary in one pass, but
+ * a PDF edit by exiftool only appends a new revision: the old values stay in the bytes. qpdf then
+ * rewrites the file from the objects in use, so the old revision is gone. --deterministic-id
+ * makes the ID from the content, so two runs give the same bytes (plan review C3, C4).
+ * Returns { path, warnings }: qpdf exit 3 means it wrote the file but repaired something; the
+ * checks in checkClean() decide whether the result is good. Tool output is never printed: it can
+ * quote a metadata value.
+ */
+export function cleanMetadata(file, id, workDir) {
+  const stripped = join(workDir, 'exif', `${id}.pdf`);
+  const out = join(workDir, 'clean', `${id}.pdf`);
+  mkdirSync(join(workDir, 'exif'), { recursive: true });
+  mkdirSync(join(workDir, 'clean'), { recursive: true });
+  rmSync(stripped, { force: true }); // exiftool -o refuses to overwrite a file
+  rmSync(out, { force: true });
+  const ex = tool(
+    'exiftool',
+    ['-q', '-q', '-all=', `-PDF:Title=${id}`, `-PDF:Author=${AUTHOR}`, '-o', stripped, file],
+    'brew install exiftool',
+  );
+  // Checked by the output file too: a tool can exit 0 and write nothing.
+  if (ex.error || ex.status !== 0 || !existsSync(stripped)) {
+    throw new Error(`exiftool did not clean the metadata (exit ${ex.status ?? ex.error?.code})`);
+  }
+  const q = tool('qpdf', ['--deterministic-id', stripped, out], 'brew install qpdf');
+  if (q.error || ![0, 3].includes(q.status) || !existsSync(out)) {
+    throw new Error(`qpdf did not rewrite the file (exit ${q.status ?? q.error?.code})`);
+  }
+  const warnings = q.status === 3 ? (q.stderr.match(/^WARNING/gim) ?? []).length || 1 : 0;
+  return { path: out, warnings };
+}
+
+/** The forms a word can take in PDF bytes: plain, UTF-16BE, and both as hex, lower case. */
+const byteForms = (w) => {
+  const be = Buffer.from(w, 'utf16le').swap16();
+  return [
+    w,
+    be.toString('latin1'),
+    be.toString('hex'),
+    Buffer.from(w, 'latin1').toString('hex'),
+  ].map((s) => s.toLowerCase());
+};
+
+/**
+ * Checks the files in workDir/clean/ after step 6. VF-04 runs on them as it runs on the site.
+ * Then every word (4+ letters) of each old metadata value is searched for in the raw and inflated
+ * bytes, as text, UTF-16 and hex: pdfinfo reads only the newest revision, so it cannot see an old
+ * value left behind. A word that is also in the page text, in "Aditya Gupta" or in the project
+ * name is skipped, because it is allowed to be there. The page count must not change.
+ */
+export function checkClean(workDir, files) {
+  const findings = [];
+  const cleanDir = join(workDir, 'clean');
+  const cleanCtx = { root: cleanDir, distDir: cleanDir };
+  const byId = new Map(files.map((f) => [`${f.id}.pdf`, f]));
+  for (const f of vf04.run(cleanCtx)) {
+    findings.push({
+      step: 6,
+      check: f.check,
+      file: byId.get(f.file)?.source ?? f.file,
+      message: `after cleaning, ${f.message}`,
+      fix: 'export the PDF again from the source document, then run this again',
+    });
+  }
+  const workCtx = { root: workDir, distDir: workDir };
+  for (const f of files) {
+    const name = `${f.id}.pdf`;
+    const old = pdfInfo(workCtx, name);
+    const fail = (message) =>
+      findings.push({
+        step: 6,
+        check: 'clean',
+        file: f.source,
+        message,
+        fix: 'check that qpdf rewrote the file (prepare.mjs step 6), then run this again',
+      });
+    if (pdfInfo(cleanCtx, name).Pages !== old.Pages) {
+      fail(`has ${pdfInfo(cleanCtx, name).Pages} pages after cleaning, not ${old.Pages}`);
+    }
+    const hay = pdfRaw(cleanCtx, name).toLowerCase();
+    const allowed = new Set(
+      key(`${AUTHOR} ${f.id} ${pdfPages(cleanCtx, name).join(' ')}`).split(' '),
+    );
+    const fields = [
+      ...['Title', 'Subject', 'Keywords', 'Author', 'Creator', 'Producer'],
+      ...Object.keys(old).filter((k) => !STANDARD.has(k)),
+    ];
+    for (const field of fields) {
+      const words = (old[field] ?? '')
+        .split(/[^\p{L}\p{N}]+/u)
+        .filter((w) => w.length >= 4 && !allowed.has(key(w)));
+      if (words.some((w) => byteForms(w).some((s) => hay.includes(s)))) {
+        fail(`still holds the old ${field} value in its bytes`);
+      }
+    }
+  }
+  return findings;
+}
+
 // ── The run ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Steps 1–5 over every input. Returns { findings, notes, files }; any finding means the run
+ * Steps 1–6 over every input. Returns { findings, notes, files }; any finding means the run
  * failed and nothing may be written. A missing or empty names list is a finding, never a skip.
+ * Step 6 runs only when steps 1–5 found nothing: a file that fails a scan is not worth cleaning.
  */
 export function prepare({ inputsDir, privateDir, allowFile, workDir }) {
   const findings = [];
@@ -477,6 +602,32 @@ export function prepare({ inputsDir, privateDir, allowFile, workDir }) {
     notes.push(...r.notes);
     files.push({ id: input.id, source: input.source, path: file, pages: r.pages });
   }
+  if (findings.length > 0) return { findings, notes, files };
+
+  // Step 6.
+  for (const f of files) {
+    try {
+      const { path, warnings } = cleanMetadata(f.path, f.id, workDir);
+      f.clean = path;
+      if (warnings > 0) {
+        notes.push({
+          step: 6,
+          check: 'clean',
+          file: f.source,
+          message: `qpdf repaired ${warnings} problem(s) in the file (exit 3); the checks below ran on the result`,
+        });
+      }
+    } catch (err) {
+      findings.push({
+        step: 6,
+        check: 'clean',
+        file: f.source,
+        message: err.message,
+        fix: 'see the message',
+      });
+    }
+  }
+  if (findings.length === 0) findings.push(...checkClean(workDir, files));
   return { findings, notes, files };
 }
 

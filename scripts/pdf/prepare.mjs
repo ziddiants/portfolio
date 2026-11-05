@@ -1,7 +1,8 @@
-// npm run pdf:prepare — the cohort PDF pipeline (ENG-08; ERD § Assets). Steps 1–5 only for now:
+// npm run pdf:prepare — the cohort PDF pipeline (ENG-08; ERD § Assets). Steps 1–6 only for now:
 // take the inputs from .inputs/, convert a DOCX, check the text layer, scan for names, phone
-// numbers, email addresses, links, comments and active content, and apply the "we" rule. Any
-// finding exits 1. It writes nothing to public/ yet (steps 6–9 come later in ENG-08).
+// numbers, email addresses, links, comments and active content, apply the "we" rule, and clean
+// the metadata in a temp folder. Any finding exits 1. It writes nothing to public/ yet (steps 7–9
+// come later in ENG-08).
 //
 // No "is this the main module" check: through a symlinked path it can be false, and the script
 // would then do nothing and exit 0 (ENG-07 lesson).
@@ -29,7 +30,7 @@ try {
     console.error(`pdf:prepare: FAILED (${findings.length} findings). Nothing was written.`);
   } else {
     console.log(
-      `pdf:prepare: steps 1–5 clean on ${files.length} files. Steps 6–9 are not built yet; nothing was written.`,
+      `pdf:prepare: steps 1–6 clean on ${files.length} files. Steps 7–9 are not built yet; nothing was written.`,
     );
     code = 0;
   }
