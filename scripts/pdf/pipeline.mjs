@@ -22,9 +22,9 @@ import { fold, snippet } from '../verify/lib/text.mjs';
 import { phonesIn } from '../verify/rules/vf-01.mjs';
 import { key, nameMatchers } from '../verify/rules/vf-02.mjs';
 
-/** The three cohort files (build-plan line 288). Only Skooling may come as a DOCX (ERD step 2). */
+/** The three cohort files (build-plan line 288). Vendrax and Skooling may come as a DOCX (D86). */
 export const PROJECTS = [
-  { id: 'Vendrax', pdf: 'Vendrax.pdf' },
+  { id: 'Vendrax', pdf: 'Vendrax.pdf', docx: 'Vendrax.docx' },
   { id: 'Skooling', pdf: 'Skooling-PRD.pdf', docx: 'Skooling-PRD.docx' },
   { id: 'NyaySetu', pdf: 'NyaySetu_PRD.pdf' },
 ];

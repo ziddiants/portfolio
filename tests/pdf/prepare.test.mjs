@@ -74,6 +74,18 @@ describe('step 1: inputs', () => {
     ]);
   });
 
+  test('Vendrax given as both PDF and DOCX stops the run (D86)', () => {
+    expect(ids(run({ files: { 'Vendrax.docx': 'x' } }).findings)).toEqual([
+      '1/inputs Vendrax.pdf + Vendrax.docx',
+    ]);
+  });
+
+  test('NyaySetu as a DOCX is not a cohort file', () => {
+    expect(ids(run({ files: { 'NyaySetu_PRD.docx': 'x' } }).findings)).toEqual([
+      '1/inputs NyaySetu_PRD.docx',
+    ]);
+  });
+
   test('a folder with a cohort file name stops the run', () => {
     const dir = tempDir('pdf-inputs-');
     writeFiles(dir, { 'Vendrax.pdf/x': 'x', 'Skooling-PRD.pdf': 'x', 'NyaySetu_PRD.pdf': 'x' });
