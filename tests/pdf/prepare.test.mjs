@@ -1,9 +1,16 @@
-// The cohort PDF pipeline, steps 1–6 (ENG-08; ERD § Assets). Every input is made at test time in
+// The cohort PDF pipeline, steps 1–9 (ENG-08; ERD § Assets). Every input is made at test time in
 // a temp folder; the names are invented and are not on the real names list (D83). The real-file
 // run (TC-B04 on the real files) is local only, because .inputs/ is git-ignored.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { chmodSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import {
@@ -11,6 +18,7 @@ import {
   hostOf,
   isReserved,
   loadAllow,
+  MAX_BYTES,
   prepare,
   sentences,
 } from '../../scripts/pdf/pipeline.mjs';
@@ -24,8 +32,17 @@ const clean = () => ({
   'NyaySetu_PRD.pdf': makePdf({ text: CLEAN }),
 });
 
-/** Runs steps 1–5 on a temp .inputs/ holding the three clean files plus `files` (null deletes). */
-function run({ files = {}, names = NAMES, allow = { domains: [], emails: [] } } = {}) {
+/**
+ * Runs the pipeline on a temp .inputs/ holding the three clean files plus `files` (null deletes).
+ * The outputs go to a temp outDir (returned as r.outDir), never to the real public/.
+ */
+function run({
+  files = {},
+  names = NAMES,
+  allow = { domains: [], emails: [] },
+  outDir = join(tempDir('pdf-out-'), 'case-studies'),
+  maxBytes,
+} = {}) {
   const inputsDir = tempDir('pdf-inputs-');
   const all = { ...clean(), ...files };
   for (const [name, body] of Object.entries(all)) {
@@ -34,7 +51,15 @@ function run({ files = {}, names = NAMES, allow = { domains: [], emails: [] } } 
   const privateDir = names === null ? tempDir('pdf-private-') : fakePrivate({ 'names.txt': names });
   const allowFile = join(tempDir('pdf-allow-'), 'allow.json');
   writeFileSync(allowFile, JSON.stringify(allow));
-  return prepare({ inputsDir, privateDir, allowFile, workDir: tempDir('pdf-work-') });
+  const r = prepare({
+    inputsDir,
+    privateDir,
+    allowFile,
+    workDir: tempDir('pdf-work-'),
+    outDir,
+    maxBytes,
+  });
+  return { ...r, outDir };
 }
 
 const ids = (findings) =>
@@ -366,9 +391,15 @@ describe('step 6: clean metadata', () => {
    * Runs fn with a fake `name` tool first on PATH. The script sees $src and $dst, the last two
    * arguments, so it does not depend on the flags before them.
    */
-  function withFake(name, script, fn) {
+  // A fake qpdf passes the trailer read (--json-output) to the real qpdf: only the rewrite is faked.
+  const REAL_QPDF = spawnSync('sh', ['-c', 'command -v qpdf'], { encoding: 'utf8' }).stdout.trim();
+  function withFake(name, script, fn, { passJson = name === 'qpdf' } = {}) {
     const bin = tempDir('pdf-bin-');
-    writeFileSync(join(bin, name), `#!/bin/sh\nfor a; do src=$dst; dst=$a; done\n${script}\n`);
+    const pass = passJson ? `[ "$1" = --json-output ] && exec '${REAL_QPDF}' "$@"\n` : '';
+    writeFileSync(
+      join(bin, name),
+      `#!/bin/sh\n${pass}for a; do src=$dst; dst=$a; done\n${script}\n`,
+    );
     chmodSync(join(bin, name), 0o755);
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;
@@ -408,6 +439,32 @@ describe('step 6: clean metadata', () => {
     const a = run({ files: dirty });
     const b = run({ files: dirty });
     expect(a.files.map((f) => sha(f.clean))).toEqual(b.files.map((f) => sha(f.clean)));
+  });
+
+  test('a trailer key that is not /Root, /Info or /Size is removed', () => {
+    const files = {
+      'Vendrax.pdf': makePdf({ text: CLEAN, trailer: '/DocChecksum /0A1B2C3D /Zorvath (x)' }),
+    };
+    const r = run({ files });
+    expect(r.findings).toEqual([]);
+    const v = r.files.find((f) => f.id === 'Vendrax');
+    expect(readFileSync(v.path, 'latin1')).toContain('/DocChecksum'); // the control
+    expect(readFileSync(v.clean, 'latin1')).not.toMatch(/DocChecksum|Zorvath/);
+  });
+
+  test('two exports that differ only in /DocChecksum give the same bytes', () => {
+    const one = (sum) => ({
+      'Vendrax.pdf': makePdf({ text: CLEAN, trailer: `/DocChecksum /${sum}` }),
+    });
+    const a = run({ files: one('D4FC7A817D975C93') }).files[0].clean;
+    const b = run({ files: one('30DFD6D823542592') }).files[0].clean;
+    expect(sha(a)).toBe(sha(b));
+  });
+
+  test('a trailer qpdf cannot read stops the run', () => {
+    // The trailer read goes to this fake too: it prints nothing, so there is no JSON.
+    const r = withFake('qpdf', 'exit 0', () => run(), { passJson: false });
+    expect(r.findings[0].message).toMatch(/^qpdf could not read the trailer \(exit 0\)$/);
   });
 
   test('XMP on a page object stops the run, and the message names no value', () => {
@@ -475,6 +532,116 @@ describe('step 6: clean metadata', () => {
       ]);
     } finally {
       delete process.env.FAKE_ONE_PAGE;
+    }
+  });
+});
+
+describe('steps 7–9: size, write, image pages', () => {
+  const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
+  const written = (r) => (existsSync(r.outDir) ? readdirSync(r.outDir).sort() : []);
+
+  test('a clean run writes exactly the three outputs, with their sha256', () => {
+    const r = run();
+    expect(r.findings).toEqual([]);
+    expect(written(r)).toEqual(['NyaySetu.pdf', 'Skooling.pdf', 'Vendrax.pdf']);
+    for (const f of r.files) {
+      expect(f.output).toBe(join(r.outDir, `${f.id}.pdf`));
+      expect(f.sha256).toBe(sha(f.output));
+      expect(readFileSync(f.output).equals(readFileSync(f.clean))).toBe(true);
+    }
+  });
+
+  test('a second run writes the same bytes (TC-D08: same sha256)', () => {
+    const outDir = join(tempDir('pdf-out-'), 'case-studies');
+    const a = run({ outDir }).files.map((f) => f.sha256);
+    const b = run({ outDir }).files.map((f) => f.sha256);
+    expect(b).toEqual(a);
+  });
+
+  test('the limit is 10 MB, counted in decimal', () => {
+    expect(MAX_BYTES).toBe(10_000_000);
+  });
+
+  test('a file over the limit stops the run, and none of the three is written', () => {
+    // Lower-case letters from a fixed seed: text that compresses badly, with no digit, dot or
+    // capital "I" that a scan could read as a phone number, a link or the "we" rule.
+    let seed = 7;
+    const letters = Array.from({ length: 6000 }, (_, i) => {
+      seed = (seed * 48271) % 2147483647;
+      return i % 7 === 6 ? ' ' : String.fromCharCode(97 + (seed % 26));
+    }).join('');
+    const limit = Math.max(...run().files.map((f) => f.bytes));
+    const r = run({ maxBytes: limit, files: vendrax({ text: `${CLEAN}\n${letters}` }) });
+    expect(ids(r.findings)).toEqual(['7/size Vendrax.pdf']);
+    expect(r.findings[0].message).toMatch(/^is \d+\.\d MB after cleaning; the limit is 0\.0 MB$/);
+    expect(written(r)).toEqual([]);
+  });
+
+  test('a file at the limit passes', () => {
+    const probe = run();
+    const max = Math.max(...probe.files.map((f) => f.bytes));
+    expect(run({ maxBytes: max }).findings).toEqual([]);
+    expect(ids(run({ maxBytes: max - 1 }).findings).length).toBeGreaterThan(0);
+  });
+
+  test('a finding in an earlier step writes nothing', () => {
+    const r = run({ files: vendrax({ text: `${CLEAN} Thanks to Kelvaro Dunn.` }) });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p1']);
+    expect(written(r)).toEqual([]);
+  });
+
+  test.each(['Skooling-PRD.pdf', '.DS_Store'])(
+    'a stray file (%s) in the output folder stops the run, and nothing is written',
+    (stray) => {
+      const outDir = join(tempDir('pdf-out-'), 'case-studies');
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(join(outDir, stray), 'old');
+      const r = run({ outDir });
+      expect(ids(r.findings)).toEqual([`8/output ${stray}`]);
+      expect(written(r)).toEqual([stray]);
+    },
+  );
+
+  test('old outputs are replaced by the new run', () => {
+    const outDir = join(tempDir('pdf-out-'), 'case-studies');
+    mkdirSync(outDir, { recursive: true });
+    writeFileSync(join(outDir, 'Vendrax.pdf'), 'old');
+    const r = run({ outDir });
+    expect(r.findings).toEqual([]);
+    expect(readFileSync(join(outDir, 'Vendrax.pdf'), 'latin1')).toMatch(/^%PDF-/);
+  });
+
+  test('step 9 lists the pages that hold an image', () => {
+    const r = run({
+      files: { 'Vendrax.pdf': makePdf({ text: `${CLEAN}\f${CLEAN}`, image: true }) },
+    });
+    expect(r.findings).toEqual([]);
+    expect(r.files.map((f) => `${f.id}:${f.imagePages.join(',')}`)).toEqual([
+      'Vendrax:1',
+      'Skooling:',
+      'NyaySetu:',
+    ]);
+  });
+
+  test.each([
+    ['exits 1', 'echo "Syntax Error" >&2; exit 1'],
+    ['exits 0 and prints nothing', 'exit 0'],
+  ])('pdfimages that %s stops the run before any write', (_, script) => {
+    const bin = tempDir('pdf-bin-');
+    writeFileSync(join(bin, 'pdfimages'), `#!/bin/sh\n${script}\n`);
+    chmodSync(join(bin, 'pdfimages'), 0o755);
+    const path = process.env.PATH;
+    process.env.PATH = `${bin}:${path}`;
+    try {
+      const r = run();
+      expect(r.findings.map((f) => `${f.step}/${f.check} ${f.file}`)).toEqual([
+        '9/images Vendrax.pdf',
+        '9/images Skooling-PRD.pdf',
+        '9/images NyaySetu_PRD.pdf',
+      ]);
+      expect(written(r)).toEqual([]);
+    } finally {
+      process.env.PATH = path;
     }
   });
 });

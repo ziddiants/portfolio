@@ -1,12 +1,13 @@
-// The cohort PDF pipeline, steps 1–6 (ENG-08; ERD § Assets, PDF pipeline). It reads the three
-// cohort files from .inputs/ (git-ignored), turns a DOCX into a PDF, scans every PDF, and cleans
-// its metadata before anything can be written to public/. Steps 7–9 (check size, write, image
-// list) come later in this ticket.
+// The cohort PDF pipeline, steps 1–9 (ENG-08; ERD § Assets, PDF pipeline). It reads the three
+// cohort files from .inputs/ (git-ignored), turns a DOCX into a PDF, scans every PDF, cleans its
+// metadata, checks its size, lists the pages with images for the eye check, and only then writes
+// all three to public/case-studies/. One finding anywhere means nothing is written.
 //
 // A finding never prints what it protects: a name shows as its names.txt line, a phone number as
 // its last two digits, an email address or a link as its domain only, a metadata value as its
 // field name only.
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   copyFileSync,
   existsSync,
@@ -15,12 +16,15 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
+  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { privateLines, privateState } from '../verify/lib/private.mjs';
 import {
   pdfAttachments,
+  pdfImagePages,
   pdfInfo,
   pdfLinks,
   pdfPages,
@@ -442,12 +446,18 @@ function tool(cmd, args, install) {
   return r;
 }
 
+// The trailer keys a clean file keeps; qpdf writes a new /ID itself. Any other key goes: no scan
+// reads the trailer, and LibreOffice's /DocChecksum changes on every export, so it would make
+// every run's bytes differ (TC-D08, plan review C4).
+const TRAILER_KEYS = new Set(['/Root', '/Info', '/Size']);
+
 /**
  * Writes workDir/clean/<id>.pdf with Title <id>, Author "Aditya Gupta" and no other metadata.
  * exiftool removes every tag and writes the two fields into the Info dictionary in one pass, but
  * a PDF edit by exiftool only appends a new revision: the old values stay in the bytes. qpdf then
- * rewrites the file from the objects in use, so the old revision is gone. --deterministic-id
- * makes the ID from the content, so two runs give the same bytes (plan review C3, C4).
+ * rewrites the file from the objects in use, so the old revision is gone, and keeps only the
+ * TRAILER_KEYS in the trailer (read as JSON, given back with --update-from-json).
+ * --deterministic-id makes the ID from the content, so two runs give the same bytes (C3, C4).
  * Returns { path, warnings }: qpdf exit 3 means it wrote the file but repaired something; the
  * checks in checkClean() decide whether the result is good. Tool output is never printed: it can
  * quote a metadata value.
@@ -468,7 +478,29 @@ export function cleanMetadata(file, id, workDir) {
   if (ex.error || ex.status !== 0 || !existsSync(stripped)) {
     throw new Error(`exiftool did not clean the metadata (exit ${ex.status ?? ex.error?.code})`);
   }
-  const q = tool('qpdf', ['--deterministic-id', stripped, out], 'brew install qpdf');
+  const t = tool(
+    'qpdf',
+    ['--json-output', '--json-object=trailer', stripped, '-'],
+    'brew install qpdf',
+  );
+  let json;
+  try {
+    if (t.error || ![0, 3].includes(t.status)) throw new Error();
+    json = JSON.parse(t.stdout);
+    const trailer = json.qpdf[1].trailer.value;
+    json.qpdf[1].trailer.value = Object.fromEntries(
+      Object.entries(trailer).filter(([k]) => TRAILER_KEYS.has(k)),
+    );
+  } catch {
+    throw new Error(`qpdf could not read the trailer (exit ${t.status ?? t.error?.code})`);
+  }
+  const trailerFile = join(workDir, 'exif', `${id}.trailer.json`);
+  writeFileSync(trailerFile, JSON.stringify(json));
+  const q = tool(
+    'qpdf',
+    ['--deterministic-id', `--update-from-json=${trailerFile}`, stripped, out],
+    'brew install qpdf',
+  );
   if (q.error || ![0, 3].includes(q.status) || !existsSync(out)) {
     throw new Error(`qpdf did not rewrite the file (exit ${q.status ?? q.error?.code})`);
   }
@@ -543,14 +575,86 @@ export function checkClean(workDir, files) {
   return findings;
 }
 
+// ── Steps 7–9: size, write, image pages ─────────────────────────────────────────────────────
+
+// 10 MB, counted in decimal (10 000 000 bytes), the stricter reading (ERD step 7). Cloudflare
+// Pages allows 25 MiB per file.
+export const MAX_BYTES = 10_000_000;
+const mb = (n) => `${(n / 1_000_000).toFixed(1)} MB`;
+
+/**
+ * Checks before any write: each clean file is at most maxBytes (step 7), its image pages can be
+ * read (step 9), and outDir holds no file other than the three outputs. Any other file would
+ * ship with the site, because assemble-public.mjs copies all of public/ (a dot-file too).
+ */
+function checkBeforeWrite(workDir, files, outDir, maxBytes) {
+  const findings = [];
+  const cleanDir = join(workDir, 'clean');
+  const cleanCtx = { root: cleanDir, distDir: cleanDir };
+  for (const f of files) {
+    f.bytes = statSync(f.clean).size;
+    if (f.bytes > maxBytes) {
+      findings.push({
+        step: 7,
+        check: 'size',
+        file: f.source,
+        message: `is ${mb(f.bytes)} after cleaning; the limit is ${mb(maxBytes)}`,
+        fix: 'export it again with smaller images (for example LibreOffice from the DOCX, D86), then run this again',
+      });
+    }
+    try {
+      f.imagePages = pdfImagePages(cleanCtx, `${f.id}.pdf`);
+    } catch (err) {
+      findings.push({
+        step: 9,
+        check: 'images',
+        file: f.source,
+        message: err.message,
+        fix: 'see the message',
+      });
+    }
+  }
+  const outputs = new Set(files.map((f) => `${f.id}.pdf`));
+  if (existsSync(outDir)) {
+    for (const n of readdirSync(outDir).filter((n) => !outputs.has(n))) {
+      findings.push({
+        step: 8,
+        check: 'output',
+        file: n,
+        message: 'is in public/case-studies/ but is not one of the three outputs',
+        fix: 'delete it: only Vendrax.pdf, Skooling.pdf and NyaySetu.pdf belong there',
+      });
+    }
+  }
+  return findings;
+}
+
+/** Step 8: copies each clean file to outDir/<id>.pdf and records its path and sha256. */
+function writeOutputs(files, outDir) {
+  mkdirSync(outDir, { recursive: true });
+  for (const f of files) {
+    f.output = join(outDir, `${f.id}.pdf`);
+    copyFileSync(f.clean, f.output);
+    f.sha256 = createHash('sha256').update(readFileSync(f.output)).digest('hex');
+  }
+}
+
 // ── The run ─────────────────────────────────────────────────────────────────────────────────
 
 /**
- * Steps 1–6 over every input. Returns { findings, notes, files }; any finding means the run
- * failed and nothing may be written. A missing or empty names list is a finding, never a skip.
- * Step 6 runs only when steps 1–5 found nothing: a file that fails a scan is not worth cleaning.
+ * Steps 1–9 over every input. Returns { findings, notes, files }; any finding means the run
+ * failed and nothing was written. A missing or empty names list is a finding, never a skip.
+ * Each step runs only when the steps before it found nothing, and step 8 writes only after
+ * steps 7 and 9 passed for every file: all three files are written, or none.
  */
-export function prepare({ inputsDir, privateDir, allowFile, workDir }) {
+export function prepare({
+  inputsDir,
+  privateDir,
+  allowFile,
+  workDir,
+  outDir,
+  maxBytes = MAX_BYTES,
+}) {
   const findings = [];
   const notes = [];
   const files = [];
@@ -628,6 +732,11 @@ export function prepare({ inputsDir, privateDir, allowFile, workDir }) {
     }
   }
   if (findings.length === 0) findings.push(...checkClean(workDir, files));
+  if (findings.length > 0) return { findings, notes, files };
+
+  // Steps 7 and 9 (read only), then step 8.
+  findings.push(...checkBeforeWrite(workDir, files, outDir, maxBytes));
+  if (findings.length === 0) writeOutputs(files, outDir);
   return { findings, notes, files };
 }
 

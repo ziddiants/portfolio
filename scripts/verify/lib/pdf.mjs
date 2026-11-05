@@ -1,5 +1,5 @@
-// Reads the PDFs in dist/<id>/ with poppler (pdftotext, pdfinfo) for VF-01, VF-02, VF-03, VF-04
-// and VF-08. A missing tool or a file it cannot read throws, so the runner reports a failure,
+// Reads the PDFs in dist/<id>/ with poppler (pdftotext, pdfinfo, pdfdetach, pdfimages) for
+// VF-01, VF-02, VF-03, VF-04 and VF-08, and for the cohort PDF pipeline (scripts/pdf/). A missing tool or a file it cannot read throws, so the runner reports a failure,
 // never a pass (past mistake: a scanner can exit 0 without scanning).
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -112,6 +112,23 @@ export const pdfLinks = (ctx, file) =>
       .map((parts) => ({ page: Number(parts[0]), url: parts.slice(2).join(' ') }))
       .filter((l) => l.url),
   );
+
+/**
+ * The pages that hold at least one raster image, in order (pdfimages -list). A drawing made of
+ * vector paths is not an image here, so this list shortens an eye check; it never replaces one.
+ */
+export const pdfImagePages = (ctx, file) =>
+  memo(ctx, `pdfimages:${file}`, () => {
+    const lines = tool('pdfimages', ['-list', abs(ctx, file)]).split('\n');
+    if (!/^page\s+num\s/.test(lines[0] ?? '')) {
+      throw new Error(`pdfimages printed an unknown first line for ${file}`);
+    }
+    const pages = lines
+      .slice(2)
+      .map((l) => Number(l.trim().split(/\s+/)[0]))
+      .filter((n) => Number.isInteger(n) && n > 0);
+    return [...new Set(pages)].sort((a, b) => a - b);
+  });
 
 /** Every URL in the PDF's objects (link annotations). */
 export const pdfUrls = (ctx, file) => pdfLinks(ctx, file).map((l) => l.url);

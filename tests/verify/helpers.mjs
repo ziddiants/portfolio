@@ -141,6 +141,8 @@ export function makePdf({
   links = [],
   annots = [],
   catalog = '',
+  image = false,
+  trailer = '',
 } = {}) {
   const esc = (s) => s.replace(/([\\()])/g, '\\$1');
   const contentOf = (pageText) =>
@@ -151,11 +153,11 @@ export function makePdf({
   const [first, ...more] = text.split('\f');
   const stream = (dict, body) => `<< ${dict} /Length ${body.length} >>\nstream\n${body}\nendstream`;
   const catalogMeta = xmp ?? metadata;
-  const pageDict = (contents, extra = '') =>
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >>' +
-    ` /Contents ${contents} 0 R${extra} >>`;
+  const pageDict = (contents, extra = '', xobject = '') =>
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >>' +
+    `${xobject} >> /Contents ${contents} 0 R${extra} >>`;
   // Objects 1–7 are fixed; annotations follow as 8, 9, …; then one page and its content per
-  // extra page.
+  // extra page; then, with `image`, one 1×1 grey image drawn on page 1.
   const annotDicts = [
     ...links.map(
       (uri) =>
@@ -170,15 +172,18 @@ export function makePdf({
     stream('', contentOf(t)),
   ]);
   const kids = ['3 0 R', ...more.map((_, i) => `${firstExtra + 2 * i} 0 R`)];
+  const imageObj = firstExtra + 2 * more.length;
+  const drawImage = image ? ' q 10 0 0 10 72 600 cm /Im1 Do Q' : '';
   const objs = [
     `<< /Type /Catalog /Pages 2 0 R${catalogMeta !== null ? ' /Metadata 6 0 R' : ''}${catalog ? ` ${catalog}` : ''} >>`,
     `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length} >>`,
     pageDict(
       5,
       `${pageXmp ? ' /Metadata 6 0 R' : ''}${annotDicts.length ? ` /Annots [${annotRefs}]` : ''}`,
+      image ? ` /XObject << /Im1 ${imageObj} 0 R >>` : '',
     ),
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
-    stream('', contentOf(first)),
+    stream('', contentOf(first) + drawImage),
     catalogMeta !== null || pageXmp
       ? stream('/Type /Metadata /Subtype /XML', catalogMeta ?? pageXmp)
       : '<< >>',
@@ -187,6 +192,14 @@ export function makePdf({
       .join(' ')} >>`,
     ...annotDicts,
     ...extraPages,
+    ...(image
+      ? [
+          stream(
+            '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8',
+            '\x80',
+          ),
+        ]
+      : []),
   ];
   let out = '%PDF-1.4\n';
   const offsets = objs.map((body, i) => {
@@ -197,7 +210,7 @@ export function makePdf({
   const xref = out.length;
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
   out += offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('');
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 7 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 7 0 R${trailer ? ` ${trailer}` : ''} >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, 'latin1');
 }
 
