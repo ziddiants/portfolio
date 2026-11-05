@@ -1,4 +1,25 @@
 {
-  "domains": [],
+  "domains": [
+    "champions.gov.in",
+    "claude.ai",
+    "cmrindia.com",
+    "dashboard.msme.gov.in",
+    "docs.google.com",
+    "einvoice6.gst.gov.in",
+    "frontline.thehindu.com",
+    "lokniti.org",
+    "sociology.institute",
+    "vendormanagement-production-71f3.up.railway.app",
+    "williambuck.com",
+    "www.adb.org",
+    "www.aiaccountant.com",
+    "www.dnb.co.in",
+    "www.indusind.bank.in",
+    "www.msme.gov.in",
+    "www.niti.gov.in",
+    "www.quora.com",
+    "www.skooling.in",
+    "www.tribuneindia.com"
+  ],
   "emails": []
 }
