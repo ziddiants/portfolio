@@ -79,8 +79,24 @@ function makeCopy(branch) {
 }
 
 /** Runs the release in the copy. Returns exit status, output and the recorded wrangler calls. */
+// VF-02 and VF-05 need private files; a fake folder with made-up entries stands in (ENG-07).
+const PRIVATE = mkdtempSync(join(tmpdir(), 'release-private-'));
+writeFileSync(join(PRIVATE, 'names.txt'), '# made up\nZorvath Quell\n');
+writeFileSync(
+  join(PRIVATE, 'content-sources.md'),
+  '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
+);
+after(() => rmSync(PRIVATE, { recursive: true, force: true }));
+
 function release(copy, args = ['--env', 'preview'], fakeMode = '') {
-  const env = { ...process.env, WRANGLER_BIN: copy.fake, FAKE_LOG: copy.log, FAKE_MODE: fakeMode };
+  const env = {
+    ...process.env,
+    WRANGLER_BIN: copy.fake,
+    FAKE_LOG: copy.log,
+    FAKE_MODE: fakeMode,
+    PORTFOLIO_PRIVATE_DIR: PRIVATE,
+    VERIFY_MODE: '',
+  };
   delete env.SITE_VERSION;
   const r = spawnSync('node', ['scripts/release.mjs', ...args], {
     cwd: copy.dir,
