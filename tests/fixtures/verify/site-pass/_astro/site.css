@@ -1,0 +1,32 @@
+:root {
+  --color-bg: #faf8f4;
+  --color-text: #1a1a1a;
+  --color-accent: #4f55d9;
+  --radius-sm: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #141310;
+  }
+}
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  -webkit-tap-highlight-color: transparent;
+  transition: color 0.12s;
+}
+.chip {
+  border-radius: var(--radius-sm);
+  background: url("data:image/svg+xml;utf8,<svg fill='%23fff'/>");
+}
+@media (min-width: 768px) {
+  body {
+    padding: 0 2rem;
+  }
+}
+@media (width>=1100px) {
+  a:hover {
+    color: var(--color-accent);
+    text-decoration-thickness: 2px;
+  }
+}

@@ -36,7 +36,7 @@ const result = runRules(rules, {
   distDir: null,
   mode: 'local',
   staged,
-  privateAvailable: true,
+  privateDir: null,
 });
 if (result.findings.length > 0) {
   console.error('\n  ✗ commit blocked (VF-06 private files, VF-16 secrets):\n');

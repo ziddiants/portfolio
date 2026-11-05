@@ -9,7 +9,9 @@ import { scan } from '../gitleaks.mjs';
 export default {
   id: 'VF-16',
   title: 'Secrets',
+  checks: ['secret'],
   needsPrivate: false,
+  pendable: false, // a privacy rule: never on the pending list
   run(ctx) {
     // gitleaks exits 0 for a folder that is not a git repository, which would be a silent pass.
     const inRepo = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], {
