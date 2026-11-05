@@ -19,6 +19,7 @@ import {
   isReserved,
   loadAllow,
   MAX_BYTES,
+  writeOutputs,
   prepare,
   sentences,
 } from '../../scripts/pdf/pipeline.mjs';
@@ -65,6 +66,30 @@ function run({
 const ids = (findings) =>
   findings.map((f) => `${f.step}/${f.check} ${f.file}${f.page ? ` p${f.page}` : ''}`).sort();
 const vendrax = (opts) => ({ 'Vendrax.pdf': makePdf(opts) });
+/** The files a run wrote to its outDir. */
+const written = (r) => (existsSync(r.outDir) ? readdirSync(r.outDir).sort() : []);
+
+// A fake qpdf passes its JSON reads (--json-output: step 4's objects, step 6's trailer) to the
+// real qpdf, so only the rewrite is faked, unless passJson is false.
+const REAL_QPDF = spawnSync('sh', ['-c', 'command -v qpdf'], { encoding: 'utf8' }).stdout.trim();
+
+/**
+ * Runs fn with a fake `name` tool first on PATH. The script sees $src and $dst, the last two
+ * arguments, so it does not depend on the flags before them.
+ */
+function withFake(name, script, fn, { passJson = name === 'qpdf' } = {}) {
+  const bin = tempDir('pdf-bin-');
+  const pass = passJson ? `[ "$1" = --json-output ] && exec '${REAL_QPDF}' "$@"\n` : '';
+  writeFileSync(join(bin, name), `#!/bin/sh\n${pass}for a; do src=$dst; dst=$a; done\n${script}\n`);
+  chmodSync(join(bin, name), 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    return fn();
+  } finally {
+    process.env.PATH = path;
+  }
+}
 
 describe('the clean case', () => {
   test('three clean PDFs give no finding, and .DS_Store is ignored', () => {
@@ -176,14 +201,18 @@ describe('step 3: text layer', () => {
 
 describe('step 4: names', () => {
   test('a name in the text stops the run; the message shows the line, not the name', () => {
-    const r = run({ files: vendrax({ text: `${CLEAN}\fThanks to Kelvaro Dunn.` }) });
+    const r = run({
+      files: vendrax({ text: `${CLEAN}\fThanks to Kelvaro Dunn for reading every page.` }),
+    });
     expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p2']);
     expect(r.findings[0].message).toBe('holds the name or label on names.txt line 1');
     expect(JSON.stringify(r)).not.toMatch(/Kelvaro|Dunn/);
   });
 
   test('a name split across a page break is found, without a page', () => {
-    const r = run({ files: vendrax({ text: `${CLEAN} With Zorvath\fPell and others.` }) });
+    const r = run({
+      files: vendrax({ text: `${CLEAN} With Zorvath\fPell and others, who read every page.` }),
+    });
     expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf']);
     expect(r.findings[0].message).toBe('holds the name or label on names.txt line 3');
   });
@@ -293,6 +322,199 @@ describe('step 4: email addresses and links', () => {
   });
 });
 
+describe('step 4: strings outside the page text', () => {
+  const link = (contents) =>
+    `<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Contents ${contents} >>`;
+
+  test('a name in a bookmark title stops the run, without a page', () => {
+    const catalog = '/Outlines << /Type /Outlines /Count 1 /First << /Title (Zorvath Pell) >> >>';
+    const r = run({ files: vendrax({ text: CLEAN, catalog }) });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf']);
+    expect(r.findings[0].message).toBe('holds the name or label on names.txt line 3');
+  });
+
+  test('a name in an annotation /Contents, written as UTF-16 hex, stops the run', () => {
+    const r = run({
+      files: vendrax({
+        text: CLEAN,
+        annots: [link('<FEFF004B0065006C007600610072006F002000440075006E006E>')],
+      }),
+    });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf']);
+  });
+
+  test('a phone number in an annotation /Contents stops the run', () => {
+    const r = run({ files: vendrax({ text: CLEAN, annots: [link(`(${fakePhone()})`)] }) });
+    expect(ids(r.findings)).toEqual(['4/phone Vendrax.pdf']);
+  });
+
+  test('a name already found on a page is not reported again without a page', () => {
+    const annots = [link('(Kelvaro Dunn)')];
+    const r = run({ files: vendrax({ text: `${CLEAN} Kelvaro Dunn.`, annots }) });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p1']);
+  });
+
+  test('a damaged file (qpdf exit 3) is still read, and its strings are scanned', () => {
+    const pdf = makePdf({ text: CLEAN, annots: [link('(Kelvaro Dunn)')] });
+    // A wrong startxref offset makes qpdf rebuild the cross-reference table and warn.
+    const damaged = Buffer.from(
+      pdf.toString('latin1').replace(/startxref\n(\d+)/, (_, n) => `startxref\n${Number(n) + 7}`),
+      'latin1',
+    );
+    const r = run({ files: { 'Vendrax.pdf': damaged } });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf']);
+  });
+
+  test('qpdf that cannot read the objects stops the run', () => {
+    const r = withFake('qpdf', 'exit 2', () => run(), { passJson: false });
+    expect(ids(r.findings)).toEqual([
+      '4/strings NyaySetu_PRD.pdf',
+      '4/strings Skooling-PRD.pdf',
+      '4/strings Vendrax.pdf',
+    ]);
+    expect(r.findings[0].message).toMatch(/could not read the objects of .* \(exit 2\)$/);
+  });
+});
+
+describe('cold review fixes (ENG-08)', () => {
+  // A JPEG made of segments only: start, the given segments, start of scan, end. pdfimages -j
+  // saves a DCTDecode stream as it is, so the image need not decode.
+  const seg = (marker, body) => {
+    const b = Buffer.from(body, 'latin1');
+    const len = Buffer.alloc(2);
+    len.writeUInt16BE(b.length + 2);
+    return Buffer.concat([Buffer.from([0xff, marker]), len, b]);
+  };
+  const jpeg = (...segments) =>
+    Buffer.concat([
+      Buffer.from([0xff, 0xd8]),
+      ...segments,
+      seg(0xda, '\x01\x01\x00\x00\x3f\x00'),
+      Buffer.from([0x00, 0xff, 0xd9]),
+    ]);
+  const JFIF = seg(0xe0, 'JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00');
+
+  test('a page with almost no text stops the run, even when another page has text', () => {
+    const r = run({ files: vendrax({ text: `${CLEAN}\f` }) });
+    expect(ids(r.findings)).toEqual(['3/text Vendrax.pdf p2']);
+    expect(r.findings[0].message).toBe(
+      'has almost no readable text (0 letters), so its text cannot be scanned',
+    );
+  });
+
+  test('a name in text placed off the page is found', () => {
+    const content = 'BT /F1 11 Tf -3000 400 Td (Kelvaro Dunn) Tj ET';
+    const r = run({ files: vendrax({ text: CLEAN, content }) });
+    expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p1']);
+  });
+
+  test('layers (optional content) stop the run', () => {
+    const catalog = '/OCProperties << /OCGs [] /D << /OFF [] >> >>';
+    const r = run({ files: vendrax({ text: CLEAN, catalog }) });
+    expect(r.findings.map((f) => `${f.check}: ${f.message}`)).toEqual([
+      'hidden: holds layers (optional content) that can hide text',
+    ]);
+  });
+
+  test.each(['Square', 'Stamp', 'Widget', 'Redact'])(
+    'a %s annotation stops the run (only links may stay)',
+    (sub) => {
+      const annot = `<< /Type /Annot /Subtype /${sub} /Rect [0 0 10 10] /T (Reviewer) >>`;
+      const r = run({ files: vendrax({ text: CLEAN, annots: [annot] }) });
+      expect(r.findings.map((f) => f.message)).toContain(`holds a ${sub} annotation`);
+    },
+  );
+
+  test.each([
+    ['a #-escaped Launch', '/OpenAction << /S /#4Caunch /F (calc.exe) >>', 'Launch'],
+    [
+      'a GoToR to a local file',
+      '/OpenAction << /S /GoToR /F (C:/Users/x/plan.pdf) /D [0] >>',
+      'GoToR',
+    ],
+    ['a /JS key with no /S', '/OpenAction << /JS (app.alert(1)) >>', 'JavaScript'],
+  ])('%s action stops the run', (_, catalog, action) => {
+    const r = run({ files: vendrax({ text: CLEAN, catalog }) });
+    expect(r.findings.map((f) => f.message)).toContain(`holds a ${action} action`);
+  });
+
+  test.each([
+    ['APP1 (EXIF)', seg(0xe1, 'Exif\x00\x00Kelvaro Dunn'), 'APP1'],
+    ['APP13 (IPTC)', seg(0xed, 'Photoshop 3.0\x00x'), 'APP13'],
+    ['a comment', seg(0xfe, 'shot by a friend'), 'COM'],
+  ])('a JPEG with %s stops the run, on its page', (_, extra, marker) => {
+    const r = run({ files: vendrax({ text: CLEAN, image: jpeg(JFIF, extra) }) });
+    expect(r.findings.map((f) => `${f.check} p${f.page}: ${f.message}`)).toEqual([
+      `image-meta p1: holds an image with ${marker} metadata, which can name its owner or the place it was taken`,
+    ]);
+  });
+
+  test('a JPEG with only JFIF and an ICC profile passes', () => {
+    const icc = seg(0xe2, 'ICC_PROFILE\x00\x01\x01x');
+    const r = run({ files: vendrax({ text: CLEAN, image: jpeg(JFIF, icc) }) });
+    expect(r.findings).toEqual([]);
+  });
+
+  test('a "we" sentence that holds an email, a number or a joined name is not printed', () => {
+    const text = `${CLEAN}\nWe interviewed the ZorvathPell team at kd.private@mailhost.zz twice.`;
+    const r = run({ files: vendrax({ text }) });
+    expect(ids(r.findings)).toEqual(['4/email Vendrax.pdf p1', '4/names Vendrax.pdf p1']);
+    expect(r.notes.map((n) => n.message)).toEqual([
+      'says "we" about research (correct when the team did it): (the sentence is not shown: it holds a name, a number or an address)',
+    ]);
+    expect(JSON.stringify(r)).not.toMatch(/ZorvathPell|kd\.private/);
+  });
+
+  test('a link host that holds a name is not printed', () => {
+    const r = run({ files: vendrax({ text: CLEAN, links: ['https://kelvarodunn.zz/cv'] }) });
+    expect(r.findings.map((f) => f.message).sort()).toEqual([
+      'has a link to a host that holds a name or a number, which is not on the allowlist',
+      'holds the name or label on names.txt line 1',
+    ]);
+    expect(JSON.stringify(r)).not.toMatch(/kelvarodunn/i);
+  });
+
+  test('a backslash ends the host: "evil.zz\\.docs.example.org" is evil.zz', () => {
+    expect(hostOf('https://evil.zz\\.docs.google.com/x')).toBe('evil.zz');
+    expect(hostOf('https:\\\\evil.zz/x')).toBe('evil.zz');
+    const allow = { domains: ['docs.google.com'], emails: [] };
+    const files = vendrax({ text: CLEAN, links: ['https://evil.zz\\.docs.google.com/x'] });
+    expect(ids(run({ files, allow }).findings)).toEqual(['4/link Vendrax.pdf p1']);
+  });
+
+  test('the cleaned bytes are scanned again (a rewrite that adds a name stops the run)', () => {
+    const named = join(tempDir('pdf-named-'), 'named.pdf');
+    writeFileSync(named, makePdf({ text: `${CLEAN} Thanks to Kelvaro Dunn.` }));
+    process.env.FAKE_NAMED = named;
+    try {
+      const r = withFake('qpdf', 'cp "$FAKE_NAMED" "$dst"; exit 3', () => run());
+      expect(ids(r.findings)).toEqual([
+        '6/rescan/names NyaySetu_PRD.pdf p1',
+        '6/rescan/names Skooling-PRD.pdf p1',
+        '6/rescan/names Vendrax.pdf p1',
+      ]);
+      expect(written(r)).toEqual([]);
+    } finally {
+      delete process.env.FAKE_NAMED;
+    }
+  });
+
+  test('a copy that fails in step 8 leaves the old outputs as they were', () => {
+    const dir = tempDir('pdf-write-');
+    const outDir = join(dir, 'case-studies');
+    mkdirSync(outDir);
+    writeFileSync(join(outDir, 'Vendrax.pdf'), 'old');
+    writeFileSync(join(dir, 'a.pdf'), 'new');
+    const files = [
+      { id: 'Vendrax', clean: join(dir, 'a.pdf') },
+      { id: 'Skooling', clean: join(dir, 'missing.pdf') },
+    ];
+    expect(() => writeOutputs(files, outDir)).toThrow(/ENOENT/);
+    expect(readdirSync(outDir)).toEqual(['Vendrax.pdf']);
+    expect(readFileSync(join(outDir, 'Vendrax.pdf'), 'utf8')).toBe('old');
+  });
+});
+
 describe('step 4: comments and active content', () => {
   test('a comment printed into the page stops the run', () => {
     const r = run({ files: vendrax({ text: `${CLEAN}\fCommented [1]: please check this` }) });
@@ -314,7 +536,7 @@ describe('step 4: comments and active content', () => {
     [
       'a script',
       '/OpenAction << /S /JavaScript /JS (app.alert(1)) >>',
-      'holds a script or a launch action',
+      'holds a JavaScript action',
     ],
     ['a form', '/AcroForm << /Fields [] >>', 'holds a form (AcroForm)'],
   ])('%s stops the run', (_, catalog, message) => {
@@ -387,29 +609,6 @@ describe('step 6: clean metadata', () => {
   };
   const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
 
-  /**
-   * Runs fn with a fake `name` tool first on PATH. The script sees $src and $dst, the last two
-   * arguments, so it does not depend on the flags before them.
-   */
-  // A fake qpdf passes the trailer read (--json-output) to the real qpdf: only the rewrite is faked.
-  const REAL_QPDF = spawnSync('sh', ['-c', 'command -v qpdf'], { encoding: 'utf8' }).stdout.trim();
-  function withFake(name, script, fn, { passJson = name === 'qpdf' } = {}) {
-    const bin = tempDir('pdf-bin-');
-    const pass = passJson ? `[ "$1" = --json-output ] && exec '${REAL_QPDF}' "$@"\n` : '';
-    writeFileSync(
-      join(bin, name),
-      `#!/bin/sh\n${pass}for a; do src=$dst; dst=$a; done\n${script}\n`,
-    );
-    chmodSync(join(bin, name), 0o755);
-    const path = process.env.PATH;
-    process.env.PATH = `${bin}:${path}`;
-    try {
-      return fn();
-    } finally {
-      process.env.PATH = path;
-    }
-  }
-
   test('a clean file gets Title = project, Author = Aditya Gupta, and nothing else', () => {
     const r = run({ files: dirty });
     expect(r.findings).toEqual([]);
@@ -462,8 +661,10 @@ describe('step 6: clean metadata', () => {
   });
 
   test('a trailer qpdf cannot read stops the run', () => {
-    // The trailer read goes to this fake too: it prints nothing, so there is no JSON.
-    const r = withFake('qpdf', 'exit 0', () => run(), { passJson: false });
+    // Only the trailer read fails: it prints nothing, so there is no JSON. Step 4's object read
+    // goes to the real qpdf.
+    const script = `case "$*" in *--json-object=trailer*) exit 0;; esac\nexec '${REAL_QPDF}' "$@"`;
+    const r = withFake('qpdf', script, () => run(), { passJson: false });
     expect(r.findings[0].message).toMatch(/^qpdf could not read the trailer \(exit 0\)$/);
   });
 
@@ -538,7 +739,6 @@ describe('step 6: clean metadata', () => {
 
 describe('steps 7–9: size, write, image pages', () => {
   const sha = (file) => createHash('sha256').update(readFileSync(file)).digest('hex');
-  const written = (r) => (existsSync(r.outDir) ? readdirSync(r.outDir).sort() : []);
 
   test('a clean run writes exactly the three outputs, with their sha256', () => {
     const r = run();
@@ -628,7 +828,14 @@ describe('steps 7–9: size, write, image pages', () => {
     ['exits 0 and prints nothing', 'exit 0'],
   ])('pdfimages that %s stops the run before any write', (_, script) => {
     const bin = tempDir('pdf-bin-');
-    writeFileSync(join(bin, 'pdfimages'), `#!/bin/sh\n${script}\n`);
+    // Only the page list (-list, step 9) is faked; step 4's image export goes to the real one.
+    const real = spawnSync('sh', ['-c', 'command -v pdfimages'], {
+      encoding: 'utf8',
+    }).stdout.trim();
+    writeFileSync(
+      join(bin, 'pdfimages'),
+      `#!/bin/sh\n[ "$1" = -list ] || exec '${real}' "$@"\n${script}\n`,
+    );
     chmodSync(join(bin, 'pdfimages'), 0o755);
     const path = process.env.PATH;
     process.env.PATH = `${bin}:${path}`;

@@ -15,6 +15,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -23,12 +24,16 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { privateLines, privateState } from '../verify/lib/private.mjs';
 import {
+  MIN_LETTERS,
   pdfAttachments,
+  pdfDicts,
   pdfImagePages,
   pdfInfo,
+  pdfJpegMetadata,
   pdfLinks,
   pdfPages,
   pdfRaw,
+  pdfStrings,
   pdfText,
 } from '../verify/lib/pdf.mjs';
 import { fold, snippet } from '../verify/lib/text.mjs';
@@ -157,11 +162,15 @@ const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,24})\b/g;
 const URL_IN_TEXT =
   /\b(?:https?:\/\/|www\.)[^\s<>"'()[\]{}]+|\b(?:[a-z0-9-]+\.)+[a-z]{2,24}\/[^\s<>"'()[\]{}]*/gi;
 
-/** The host of a link, lower case, without a scheme, a port or a trailing dot. */
+/**
+ * The host of a link, lower case, without a scheme, a port or a trailing dot. A backslash ends
+ * the host too, because browsers read it as "/": "https://evil.zz\\.docs.google.com/" goes to
+ * evil.zz (cold review, ENG-08).
+ */
 export function hostOf(url) {
-  const rest = url.replace(/^[a-z][a-z0-9+.-]*:\/\//i, '');
+  const rest = url.replace(/^[a-z][a-z0-9+.-]*:[/\\]{2}/i, '');
   return rest
-    .split(/[/?#:]/)[0]
+    .split(/[/\\?#:]/)[0]
     .toLowerCase()
     .replace(/\.+$/, '');
 }
@@ -215,6 +224,21 @@ export function sentences(pageText) {
 
 const JOINED = Symbol('joined text');
 
+// Actions that run code, open a file or another document, or send data: none belongs in a PRD.
+const ACTIONS = new Set([
+  '/JavaScript',
+  '/Launch',
+  '/GoToR',
+  '/GoToE',
+  '/ImportData',
+  '/SubmitForm',
+  '/ResetForm',
+  '/Rendition',
+  '/Movie',
+  '/Sound',
+  '/RichMediaExecute',
+]);
+
 // ── Steps 3–5: scan one PDF ─────────────────────────────────────────────────────────────────
 
 /**
@@ -229,7 +253,8 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
   const seen = new Set(); // check|key|page: one finding per thing per page
   const found = new Set(); // check|key: what any pass has found, on any page
   const add = (step, check, page, k, message, fix) => {
-    // JOINED is the pass over the whole text: it adds only what no single page held.
+    // JOINED marks a pass with no page (the whole text joined, or a string outside the page
+    // text): it adds only what no single page held.
     if (page === JOINED && found.has(`${check}|${k}`)) return;
     const at = page === JOINED ? undefined : page;
     if (seen.has(`${check}|${k}|${at ?? ''}`)) return;
@@ -253,6 +278,29 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
     });
     return { findings, notes, pages: 0 };
   }
+  // The floor holds per page, not only per file: one real page must not let 24 pages of text
+  // drawn as shapes or pictures pass unscanned (cold review, ENG-08).
+  pages.forEach((text, i) => {
+    const letters = (text.match(/\p{L}/gu) ?? []).length;
+    if (letters < MIN_LETTERS) {
+      add(
+        3,
+        'text',
+        i + 1,
+        't',
+        `has almost no readable text (${letters} letters), so its text cannot be scanned`,
+        'export it again with real text; if the page is only a picture, ask Aditya to check it by eye and decide',
+      );
+    }
+  });
+
+  // A message never shows a value that holds a name, a phone number or an email address: a
+  // host such as "kelvarodunn.example" would print what the names finding hides.
+  const holdsPrivate = (t) =>
+    names.entries.some((e) => e.re.test(key(t))) ||
+    phonesIn(t).length > 0 ||
+    /[^\s@]+@[^\s@]+\.[a-z]{2,}/i.test(t);
+  const shown = (t, what) => (holdsPrivate(t) ? `a ${what} that holds a name or a number` : t);
 
   const NAME_FIX = 'remove it in the source document, export the PDF again, and run this again';
   const scanText = (text, page) => {
@@ -287,7 +335,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
         'email',
         page,
         `e${address}`,
-        `holds an email address at ${domain} that is not on the allowlist`,
+        `holds an email address at ${shown(domain, 'domain')} that is not on the allowlist`,
         "remove it in the source document, or add the exact address to scripts/pdf/allow.json with Aditya's approval",
       );
     }
@@ -299,7 +347,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
         'link',
         page,
         `u${host}`,
-        `holds a link to ${host}, which is not on the allowlist`,
+        `holds a link to ${shown(host, 'host')}, which is not on the allowlist`,
         "remove it in the source document, or add the domain to scripts/pdf/allow.json with Aditya's approval",
       );
     }
@@ -332,7 +380,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
           'link',
           page,
           `u${host}`,
-          `has a link to ${host}, which is not on the allowlist`,
+          `has a link to ${shown(host, 'host')}, which is not on the allowlist`,
           "remove the link in the source document, or add the domain to scripts/pdf/allow.json with Aditya's approval",
         );
       }
@@ -353,53 +401,89 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
     }
   }
 
-  // Parts of the format that are not page text: comments as annotations, attachments, scripts,
-  // forms. None of them belongs in a published PRD, and none is scanned above, so each stops.
-  const raw = pdfRaw(ctx, file);
+  // Every other string in the file: bookmark titles, annotation /Contents and /T, alternate
+  // text, file paths. pdftotext reads none of them. As JOINED, each adds only what no page showed.
+  let strings = [];
+  let dicts = [];
+  try {
+    strings = pdfStrings(ctx, file);
+    dicts = pdfDicts(ctx, file);
+  } catch (err) {
+    findings.push({
+      step: 4,
+      check: 'strings',
+      file: source,
+      message: `cannot be scanned: ${err.message}`,
+      fix: 'export the PDF again from the source document, then run this again',
+    });
+  }
+  for (const s of strings) scanText(s, JOINED);
+
+  // Parts of the format no scan above can read, from qpdf's objects (names decoded, so
+  // "/#4Caunch" reads "/Launch"). None of them belongs in a published PRD, so each stops the run.
+  const EXPORT = 'export the PDF again from the source document, without it';
+  for (const d of dicts) {
+    const sub = d['/Subtype'];
+    // An annotation has a /Rect. Only links may stay: a comment, a mark-up, a stamp, a shape or a
+    // form field can hold a reviewer's name or a private note.
+    if (d['/Rect'] && typeof sub === 'string' && sub !== '/Link') {
+      add(4, 'comment', undefined, `a${sub}`, `holds a ${sub.slice(1)} annotation`, EXPORT);
+    }
+    if (ACTIONS.has(d['/S']) || '/JS' in d) {
+      const action = (ACTIONS.has(d['/S']) ? d['/S'] : '/JavaScript').slice(1);
+      add(4, 'active', undefined, `s${action}`, `holds a ${action} action`, EXPORT);
+    }
+    if ('/EmbeddedFiles' in d || '/EF' in d || d['/Type'] === '/EmbeddedFile') {
+      add(4, 'active', undefined, 'att', 'holds an embedded file', EXPORT);
+    }
+    if ('/OCProperties' in d) {
+      // A layer switched off hides its text from pdftotext, but a viewer can switch it on.
+      add(
+        4,
+        'hidden',
+        undefined,
+        'ocg',
+        'holds layers (optional content) that can hide text',
+        EXPORT,
+      );
+    }
+    if ('/AcroForm' in d || '/XFA' in d) {
+      add(4, 'active', undefined, 'form', 'holds a form (AcroForm)', EXPORT);
+    }
+  }
+  // Backstops from poppler, which reads the file on its own.
   const info = pdfInfo(ctx, file);
-  if (
-    /\/Subtype\s*\/(?:Text|Popup|FreeText|Highlight|Underline|StrikeOut|Squiggly|Caret|Ink|FileAttachment|Sound)\b/.test(
-      raw,
-    )
-  ) {
-    add(
-      4,
-      'comment',
-      undefined,
-      'annot',
-      'holds comment or mark-up annotations',
-      'export the PDF again without comments or mark-up',
-    );
+  if (pdfAttachments(ctx, file) > 0) {
+    add(4, 'active', undefined, 'att', 'holds an embedded file', EXPORT);
   }
-  if (pdfAttachments(ctx, file) > 0 || /\/EmbeddedFiles?\b/.test(raw)) {
-    add(
-      4,
-      'active',
-      undefined,
-      'att',
-      'holds an embedded file',
-      'export the PDF again without attachments',
-    );
-  }
-  if (info.JavaScript === 'yes' || /\/S\s*\/(?:JavaScript|Launch)\b/.test(raw)) {
-    add(
-      4,
-      'active',
-      undefined,
-      'js',
-      'holds a script or a launch action',
-      'export the PDF again from the source document',
-    );
+  if (info.JavaScript === 'yes') {
+    add(4, 'active', undefined, 'sJavaScript', 'holds a JavaScript action', EXPORT);
   }
   if (info.Form && info.Form !== 'none') {
-    add(
-      4,
-      'active',
-      undefined,
-      'form',
-      `holds a form (${info.Form})`,
-      'export the PDF again without form fields',
-    );
+    add(4, 'active', undefined, 'form', `holds a form (${info.Form})`, EXPORT);
+  }
+
+  // Metadata inside the images: exiftool -all= cleans the PDF's own metadata, not the EXIF, IPTC
+  // or comment of a JPEG stored in it (an owner name, a camera serial, a GPS position).
+  try {
+    for (const { page, marker } of pdfJpegMetadata(ctx, file)) {
+      add(
+        4,
+        'image-meta',
+        page,
+        `j${marker}`,
+        `holds an image with ${marker} metadata, which can name its owner or the place it was taken`,
+        'remove the metadata from the image in the source (for example take a screenshot of it), export again, run again',
+      );
+    }
+  } catch (err) {
+    findings.push({
+      step: 4,
+      check: 'image-meta',
+      file: source,
+      message: `cannot be scanned: ${err.message}`,
+      fix: 'see the message',
+    });
   }
 
   // Step 5: the "we" rule.
@@ -408,14 +492,16 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
   pages.forEach((text, i) => {
     for (const s of sentences(text)) {
       if (!RESEARCH.test(s)) continue;
-      const shown = `"${snippet(mask(s), 90)}"`;
+      const said = holdsPrivate(s)
+        ? '(the sentence is not shown: it holds a name, a number or an address)'
+        : `"${snippet(mask(s), 90)}"`;
       if (SINGULAR.some((re) => re.test(s))) {
         add(
           5,
           'we-rule',
           i + 1,
           `w${s}`,
-          `says "I" about research: ${shown}`,
+          `says "I" about research: ${said}`,
           'research the team ran says "we" (PRD T1): change it in the source document, export again, run again',
         );
       } else if (PLURAL.test(s)) {
@@ -424,7 +510,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
           check: 'we-rule',
           file: source,
           page: i + 1,
-          message: `says "we" about research (correct when the team did it): ${shown}`,
+          message: `says "we" about research (correct when the team did it): ${said}`,
         });
       }
     }
@@ -524,9 +610,12 @@ const byteForms = (w) => {
  * Then every word (4+ letters) of each old metadata value is searched for in the raw and inflated
  * bytes, as text, UTF-16 and hex: pdfinfo reads only the newest revision, so it cannot see an old
  * value left behind. A word that is also in the page text, in "Aditya Gupta" or in the project
- * name is skipped, because it is allowed to be there. The page count must not change.
+ * name is skipped, because it is allowed to be there. The page count must not change. Last,
+ * steps 3–4 run again on the clean file: those are the bytes that ship, and a rewrite that
+ * repaired the file (qpdf exit 3) can read objects the first scan did not. `scan` holds the
+ * scanPdf() options.
  */
-export function checkClean(workDir, files) {
+export function checkClean(workDir, files, scan) {
   const findings = [];
   const cleanDir = join(workDir, 'clean');
   const cleanCtx = { root: cleanDir, distDir: cleanDir };
@@ -570,6 +659,9 @@ export function checkClean(workDir, files) {
       if (words.some((w) => byteForms(w).some((s) => hay.includes(s)))) {
         fail(`still holds the old ${field} value in its bytes`);
       }
+    }
+    for (const g of scanPdf(cleanDir, name, f.source, scan).findings) {
+      findings.push({ ...g, step: 6, check: `rescan/${g.check}` });
     }
   }
   return findings;
@@ -629,12 +721,23 @@ function checkBeforeWrite(workDir, files, outDir, maxBytes) {
   return findings;
 }
 
-/** Step 8: copies each clean file to outDir/<id>.pdf and records its path and sha256. */
-function writeOutputs(files, outDir) {
+/**
+ * Step 8: copies each clean file to outDir/<id>.pdf and records its path and sha256. All three
+ * are copied to temp names first and renamed only when every copy worked, so a failed copy
+ * leaves the old outputs as they were.
+ */
+export function writeOutputs(files, outDir) {
   mkdirSync(outDir, { recursive: true });
+  const partial = (f) => join(outDir, `.${f.id}.pdf.partial`);
+  try {
+    for (const f of files) copyFileSync(f.clean, partial(f));
+  } catch (err) {
+    for (const f of files) rmSync(partial(f), { force: true });
+    throw err;
+  }
   for (const f of files) {
     f.output = join(outDir, `${f.id}.pdf`);
-    copyFileSync(f.clean, f.output);
+    renameSync(partial(f), f.output);
     f.sha256 = createHash('sha256').update(readFileSync(f.output)).digest('hex');
   }
 }
@@ -731,7 +834,8 @@ export function prepare({
       });
     }
   }
-  if (findings.length === 0) findings.push(...checkClean(workDir, files));
+  if (findings.length === 0)
+    findings.push(...checkClean(workDir, files, { names, nameWords, allow }));
   if (findings.length > 0) return { findings, notes, files };
 
   // Steps 7 and 9 (read only), then step 8.

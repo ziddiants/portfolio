@@ -142,6 +142,7 @@ export function makePdf({
   annots = [],
   catalog = '',
   image = false,
+  content = '',
   trailer = '',
 } = {}) {
   const esc = (s) => s.replace(/([\\()])/g, '\\$1');
@@ -183,7 +184,7 @@ export function makePdf({
       image ? ` /XObject << /Im1 ${imageObj} 0 R >>` : '',
     ),
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
-    stream('', contentOf(first) + drawImage),
+    stream('', `${contentOf(first)}${drawImage}${content ? ` ${content}` : ''}`),
     catalogMeta !== null || pageXmp
       ? stream('/Type /Metadata /Subtype /XML', catalogMeta ?? pageXmp)
       : '<< >>',
@@ -194,10 +195,16 @@ export function makePdf({
     ...extraPages,
     ...(image
       ? [
-          stream(
-            '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8',
-            '\x80',
-          ),
+          // `image` is true (a raw grey pixel) or the bytes of a JPEG (stored as DCTDecode).
+          Buffer.isBuffer(image)
+            ? stream(
+                '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode',
+                image.toString('latin1'),
+              )
+            : stream(
+                '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8',
+                '\x80',
+              ),
         ]
       : []),
   ];
