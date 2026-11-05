@@ -51,8 +51,17 @@ function makeCopy() {
   return dir;
 }
 
+// A fake private folder for VF-02 and VF-05 (made-up names; VF-06 forbids a tracked names.txt).
+const PRIVATE = mkdtempSync(join(tmpdir(), 'eng04-private-'));
+copies.push(PRIVATE);
+writeFileSync(join(PRIVATE, 'names.txt'), '# made up\nZorvath Quell\n');
+writeFileSync(
+  join(PRIVATE, 'content-sources.md'),
+  '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
+);
+
 function run(dir, args, env = {}) {
-  const fullEnv = { ...process.env, ...env };
+  const fullEnv = { ...process.env, PORTFOLIO_PRIVATE_DIR: PRIVATE, VERIFY_MODE: '', ...env };
   if (env.SITE_VERSION === undefined) delete fullEnv.SITE_VERSION;
   const r = spawnSync(args[0], args.slice(1), { cwd: dir, env: fullEnv, encoding: 'utf8' });
   return { status: r.status, out: r.stdout + r.stderr };
@@ -114,15 +123,17 @@ describe('a full build', () => {
     assert.equal(result.status, 0, result.out);
     for (const id of ['payments', 'consumer']) {
       assert.ok(existsSync(join(dir, 'dist', id, 'index.html')), `dist/${id}/index.html`);
-      // The verify step must have run on this version, with real rules (D70 ended at ENG-06).
-      assert.match(result.out, new RegExp(`verify: 2 rules passed on dist/${id}\\b`));
+      // All 16 rules ran on this version; every check passed or is pending (D70, D80).
+      const pending = id === 'payments' ? 10 : 13;
+      assert.match(
+        result.out,
+        new RegExp(`verify: 16 rules passed, ${pending} checks pending on dist/${id}\\b`),
+      );
     }
     assert.deepEqual(readdirSync(join(dir, 'dist')).sort(), ['consumer', 'payments']);
-    // The last line says what ran: all rules that exist, and how many are still to come (ENG-07).
-    assert.match(
-      result.out,
-      /✓ built and verified: consumer, payments\. 2 of 16 verify rules exist; ENG-07 adds the rest\./,
-    );
+    // The last line says what ran; with all 16 rule files present there is no gap note.
+    assert.match(result.out, /✓ built and verified: consumer, payments\.\n/);
+    assert.doesNotMatch(result.out, /of 16 verify rules exist/);
     assert.doesNotMatch(result.out, /STUB|stub/);
   });
 

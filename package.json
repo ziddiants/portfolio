@@ -37,10 +37,12 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "parse5": "8.1.0",
     "prettier": "3.9.10",
     "prettier-plugin-astro": "1.1.2",
     "typescript": "6.0.3",
     "vitest": "5.0.5",
-    "wrangler": "4.156.1"
+    "wrangler": "4.156.1",
+    "yaml": "2.9.1"
   }
 }

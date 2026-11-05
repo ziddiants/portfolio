@@ -44,7 +44,7 @@ if bash "$hook" >"$out" 2>&1; then
 else
   all=1
   for f in PRD.md private/names.txt .env .inputs/raw.pdf; do
-    grep -q "✗ VF-06 $f" "$out" || { bad "hook did not report $f on a VF-06 line"; all=0; }
+    grep -q "✗ VF-06/tracked $f" "$out" || { bad "hook did not report $f on a VF-06 line"; all=0; }
   done
   [ "$all" = 1 ] && pass "hook blocked all 4 forbidden files and named each"
 fi
@@ -62,7 +62,7 @@ printf 'const k = "ghp_%s";\n' "$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | he
 git add -f "$leak"
 if bash "$hook" >"$out" 2>&1; then
   bad "hook ALLOWED a staged fake key (should have blocked)"
-elif grep -q "✗ VF-16 $leak.*secret found" "$out"; then
+elif grep -q "✗ VF-16/secret $leak.*secret found" "$out"; then
   pass "hook blocked a staged fake key and named the file"
 else
   bad "hook blocked, but did not report the secret"; sed 's/^/      /' "$out"
@@ -86,7 +86,7 @@ git rm -q --cached .nvmrc
 git update-index --add --cacheinfo "100644,$blob,PRD.md"
 if bash "$hook" >"$out" 2>&1; then
   bad "hook ALLOWED a file renamed to PRD.md (should have blocked)"
-elif grep -q "✗ VF-06 PRD.md" "$out"; then
+elif grep -q "✗ VF-06/tracked PRD.md" "$out"; then
   pass "hook blocked a file renamed to a private name"
 else
   bad "hook blocked, but did not report PRD.md"; sed 's/^/      /' "$out"
@@ -100,7 +100,7 @@ printf 'const k = "ghp_%s"; // gitleaks:allow\n' "$(LC_ALL=C tr -dc 'A-Za-z0-9' 
 git add -f "$allow"
 if bash "$hook" >"$out" 2>&1; then
   bad "hook ALLOWED a key marked gitleaks:allow (should have blocked)"
-elif grep -q "✗ VF-16 $allow.*secret found" "$out"; then
+elif grep -q "✗ VF-16/secret $allow.*secret found" "$out"; then
   pass "hook ignores gitleaks:allow and blocks the key"
 else
   bad "hook blocked, but did not report the secret"; sed 's/^/      /' "$out"

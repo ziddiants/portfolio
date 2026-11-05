@@ -19,7 +19,9 @@ export const FORBIDDEN = [
 export default {
   id: 'VF-06',
   title: 'Forbidden files in git',
+  checks: ['tracked'],
   needsPrivate: false,
+  pendable: false, // a privacy rule: never on the pending list
   run(ctx) {
     let files = ctx.staged;
     if (files === null) {

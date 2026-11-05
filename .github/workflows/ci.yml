@@ -41,6 +41,14 @@ jobs:
           rm gitleaks.tar.gz gitleaks
           gitleaks version
 
+      # VF-01, VF-02, VF-03, VF-04 and VF-08 read PDFs with pdftotext and pdfinfo (ENG-07).
+      # The runner image has no poppler; without it those rules fail, never pass.
+      - name: Install poppler (pdftotext, pdfinfo)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends poppler-utils
+          pdftotext -v
+
       - run: npm ci
       - run: git config core.hooksPath .githooks
 
