@@ -344,8 +344,10 @@ describe('step 4: email addresses and links', () => {
 });
 
 describe('step 4: strings outside the page text', () => {
+  // A link to a reserved domain, which passes the allowlist. poppler 24.02 (CI) cannot list a
+  // Link annotation that has no action, so the fixture has one, as real links do.
   const link = (contents) =>
-    `<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /Contents ${contents} >>`;
+    `<< /Type /Annot /Subtype /Link /Rect [0 0 10 10] /A << /S /URI /URI (https://www.example.org/) >> /Contents ${contents} >>`;
 
   test('a name in a bookmark title stops the run, without a page', () => {
     const catalog = '/Outlines << /Type /Outlines /Count 1 /First << /Title (Zorvath Pell) >> >>';
@@ -373,6 +375,18 @@ describe('step 4: strings outside the page text', () => {
     const annots = [link('(Kelvaro Dunn)')];
     const r = run({ files: vendrax({ text: `${CLEAN} Kelvaro Dunn.`, annots }) });
     expect(ids(r.findings)).toEqual(['4/names Vendrax.pdf p1']);
+  });
+
+  test('pdfinfo that cannot list the links is a finding, not a crash', () => {
+    const real = spawnSync('sh', ['-c', 'command -v pdfinfo'], { encoding: 'utf8' }).stdout.trim();
+    const script = `[ "$1" = -url ] || exec '${real}' "$@"\nexit 1`;
+    const r = withFake('pdfinfo', script, () => run());
+    expect(ids(r.findings)).toEqual([
+      '4/links NyaySetu_PRD.pdf',
+      '4/links Skooling-PRD.pdf',
+      '4/links Vendrax.pdf',
+    ]);
+    expect(r.findings[0].message).toMatch(/^cannot be scanned: pdfinfo could not read /);
   });
 
   test('a damaged file (qpdf exit 3) is still read, and its strings are scanned', () => {

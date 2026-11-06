@@ -380,8 +380,21 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
   // A name or a number split across a page break reads as one in the joined text.
   scanText(pages.join('\n'), JOINED);
 
-  // Link annotations: a link's target has no visible text.
-  for (const { page, url } of pdfLinks(ctx, file)) {
+  // Link annotations: a link's target has no visible text. A reader error is a finding: the
+  // links are then unchecked, so the file must not pass.
+  let links = [];
+  try {
+    links = pdfLinks(ctx, file);
+  } catch (err) {
+    findings.push({
+      step: 4,
+      check: 'links',
+      file: source,
+      message: `cannot be scanned: ${err.message}`,
+      fix: 'export the PDF again from the source document, then run this again',
+    });
+  }
+  for (const { page, url } of links) {
     if (/^mailto:/i.test(url)) {
       scanText(url.replace(/^mailto:/i, '').split('?')[0], page);
     } else if (/^https?:\/\//i.test(url)) {
