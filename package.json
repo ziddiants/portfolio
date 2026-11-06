@@ -30,6 +30,7 @@
     "verify": "node scripts/verify/index.mjs",
     "verify:ci": "node scripts/verify/index.mjs --ci",
     "pdf:prepare": "node scripts/pdf/prepare.mjs",
+    "resume:prepare": "node scripts/pdf/resume-prepare.mjs",
     "test:unit": "vitest run"
   },
   "dependencies": {

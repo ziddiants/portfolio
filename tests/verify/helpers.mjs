@@ -63,10 +63,19 @@ export function tempDir(prefix = 'verify-') {
   return dir;
 }
 
-/** A fake private folder (VF-06 forbids a tracked names.txt, so it is made here). */
+/**
+ * A fake private folder (VF-06 forbids a tracked names.txt, so it is made here). It also holds a
+ * clean résumé for each test version in resumes/<id>.pdf (D89), unless `files` gives one.
+ */
 export function fakePrivate(files = {}) {
   const dir = tempDir('verify-private-');
-  writeFiles(dir, files);
+  const resumes = Object.fromEntries(
+    ['alpha', 'beta', 'payments', 'consumer'].map((id) => [
+      `resumes/${id}.pdf`,
+      makePdf({ text: `The ${id} résumé of Aditya Gupta, 46%` }),
+    ]),
+  );
+  writeFiles(dir, { ...resumes, ...files });
   return dir;
 }
 
@@ -84,11 +93,10 @@ export function fakePhone() {
   return `${6 + (randomBytes(1)[0] % 4)}${digits}`;
 }
 
-/** A test version's settings and folder. `dir` holds its own résumé and preview image. */
+/** A test version's settings and folder. `dir` holds its preview image (the résumé is private). */
 export function fakeVersion(id, overrides = {}) {
   const dir = tempDir(`verify-version-${id}-`);
   writeFiles(dir, {
-    'resume.pdf': makePdf({ text: `The ${id} résumé of Aditya Gupta, 46%` }),
     'og.png': `fake png for ${id}`,
     'version.json': '{}',
   });
@@ -99,7 +107,6 @@ export function fakeVersion(id, overrides = {}) {
     pageTitle: `${id} title`,
     heroSubline: `Product Manager · ${id} apps & monetization`,
     carinfoBullets: [`Led the ${id} checkout rebuild across six squads`],
-    resumeFile: 'resume.pdf',
     ogImage: 'og.png',
     indexable: id === 'alpha',
     analyticsToken: 'test',

@@ -2,7 +2,7 @@
 // extra fields (TC-A05), and no path built from a bad id or file name (review C4).
 // Each test builds its own versions folder in a temp dir; the repo is never touched.
 import { strict as assert } from 'node:assert';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, test } from 'node:test';
@@ -27,7 +27,6 @@ function addVersion(id, change = (s) => s) {
   mkdirSync(folder, { recursive: true });
   const settings = change({ ...REAL, id });
   writeFileSync(join(folder, 'version.json'), JSON.stringify(settings));
-  writeFileSync(join(folder, 'resume.pdf'), `%PDF ${id}`);
   writeFileSync(join(folder, 'og.png'), id);
 }
 
@@ -93,10 +92,6 @@ describe('TC-A04: each problem stops with its ERD message', () => {
     addVersion('payments', (s) => ({ ...s, carinfoBullets: ['  '] }));
     stops('payments', 'versions/payments/version.json: carinfoBullets.0 must not be empty');
   });
-  test('a missing résumé', () => {
-    rmSync(join(dir, 'payments', 'resume.pdf'));
-    stops('payments', 'versions/payments/resume.pdf not found');
-  });
   test('a missing preview image', () => {
     rmSync(join(dir, 'consumer', 'og.png'));
     stops('consumer', 'versions/consumer/og.png not found');
@@ -124,12 +119,6 @@ describe('review fixes: nothing is skipped or followed without a word', () => {
     ].join('\n');
     assert.throws(() => listVersions(dir), { name: 'VersionError', message });
     stops('payments', message);
-  });
-  test('a résumé that is a link is refused', () => {
-    const resume = join(dir, 'payments', 'resume.pdf');
-    rmSync(resume);
-    symlinkSync(join(dir, 'consumer', 'resume.pdf'), resume);
-    stops('payments', 'versions/payments/resume.pdf must be a real file, not a link or a folder');
   });
   test('a type error reads as plain English', () => {
     addVersion('payments', (s) => ({ ...s, pageTitle: 7, approvedNumbers: '46%' }));
@@ -170,13 +159,8 @@ describe('C4: no path is built from a bad id or file name', () => {
       'versions/payments/version.json: id is "consumer" but the folder is "payments"',
     );
   });
-  for (const name of ['../consumer/resume.pdf', 'sub/resume.pdf', '/etc/passwd', '..', 'resume']) {
-    test(`resumeFile "${name}" is rejected`, () => {
-      addVersion('payments', (s) => ({ ...s, resumeFile: name }));
-      stops(
-        'payments',
-        'versions/payments/version.json: resumeFile must be a plain file name in the version folder',
-      );
-    });
-  }
+  test('resumeFile is not a field any more: the résumé is in the private folder (D89)', () => {
+    addVersion('payments', (s) => ({ ...s, resumeFile: 'resume.pdf' }));
+    stops('payments', 'versions/payments/version.json: resumeFile is not a known field');
+  });
 });

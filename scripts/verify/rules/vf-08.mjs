@@ -64,6 +64,10 @@ export default {
       }
     }
 
+    // CI has no private folder, so its résumé is a stub (D90): the résumé checks cannot run. A
+    // local build, which has the real file, always runs them.
+    if (ctx.mode === 'ci') return findings;
+
     const resume = pdfFiles(ctx).find((f) => f === RESUME);
     const inResume = resume ? new Set(figures(pdfText(ctx, resume))) : null;
     if (!inResume) {

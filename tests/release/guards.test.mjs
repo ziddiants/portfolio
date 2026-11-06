@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
+import { writeFakeResumes } from '../fake-resumes.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const FILES = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
@@ -86,6 +87,7 @@ writeFileSync(
   join(PRIVATE, 'content-sources.md'),
   '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
 );
+writeFakeResumes(PRIVATE); // a fake clean résumé per version (D89)
 after(() => rmSync(PRIVATE, { recursive: true, force: true }));
 
 function release(copy, args = ['--env', 'preview'], fakeMode = '') {

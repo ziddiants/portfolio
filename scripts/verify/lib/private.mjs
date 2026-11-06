@@ -30,3 +30,14 @@ export function privateLines(dir, name) {
 
 /** The whole file as text. */
 export const privateText = (dir, name) => readFileSync(join(dir, name), 'utf8');
+
+/**
+ * Aditya's own phone number from phone.txt (D88, D89): the last 10 digits, or null. The résumé
+ * keeps this one number; nothing else may hold it. The value is never printed. The file is
+ * missing, empty, or has fewer than 10 digits: null, so the number is not allowed anywhere.
+ */
+export function ownPhone(dir) {
+  if (privateState(dir, 'phone.txt') !== 'ok') return null;
+  const digits = privateLines(dir, 'phone.txt')[0].text.replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : null;
+}

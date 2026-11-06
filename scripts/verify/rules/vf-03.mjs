@@ -1,13 +1,15 @@
 // VF-03: version isolation (ENG-07, V3, V4, TC-B03, TC-A06). A build may hold nothing from another
-// version: none of its files (the résumé or preview image, found by checksum under any name), its
+// version: none of its files (the résumé, which lives in the private folder (D89), or the preview
+// image, found by checksum under any name), its
 // CarInfo bullets, its subline, its page title, its analytics token, its address or its Pages
 // project name.
 //
 // Text is compared decoded and folded: Astro writes "&" as "&amp;" (plan review C5). Anything
 // this version shares word for word with the other one (a common bullet) is never flagged (C9).
 import { createHash } from 'node:crypto';
-import { readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { resumePath } from '../../../versions/resume.mjs';
 import { pdfFiles, pdfInfo, pdfText, pdfUrls } from '../lib/pdf.mjs';
 import { abs, attrValues, blocks, listFiles, pages, textFiles } from '../lib/site.mjs';
 import { escapeRegExp, fold, snippet } from '../lib/text.mjs';
@@ -36,11 +38,25 @@ export default {
 
     // Files, by checksum. A file this version also owns (an identical copy) is not foreign.
     const ownSums = new Set(versionFiles(own.dir).map((f) => sha(join(own.dir, f))));
+    const ownResume = resumePath(own.id, ctx.privateDir);
+    if (existsSync(ownResume)) ownSums.add(sha(ownResume));
     const foreign = new Map();
     for (const o of others) {
       for (const f of versionFiles(o.dir)) {
         const s = sha(join(o.dir, f));
         if (!ownSums.has(s)) foreign.set(s, `versions/${o.id}/${f}`);
+      }
+      // The other version's résumé lives in the private folder (D89). In CI there is none.
+      const r = resumePath(o.id, ctx.privateDir);
+      if (existsSync(r)) {
+        const s = sha(r);
+        if (!ownSums.has(s)) foreign.set(s, `the ${o.id} résumé`);
+      } else if (ctx.mode !== 'ci') {
+        findings.push({
+          check: 'other-file',
+          message: `cannot check the ${o.id} résumé: ${r} is missing`,
+          fix: 'put it there with npm run resume:prepare; a missing file is never a pass',
+        });
       }
     }
     for (const file of listFiles(ctx)) {

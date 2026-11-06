@@ -10,6 +10,7 @@ export const FORBIDDEN = [
   /(^|\/)\.inputs\//i,
   /(^|\/)names\.txt$/i,
   /(^|\/)private\//i,
+  /(^|\/)(Aditya-Gupta-)?resume[^/]*\.pdf$/i, // the résumé keeps the phone: never in git (D88)
   /\.private\./i,
   /(^|\/)(PRD|PRD-Brief|Architecture|design-brand|build-plan|content-sources|content-pack|alignment-audit)\.md$/i,
   /(^|\/)Past Mistakes and Lessons\.md$/i,

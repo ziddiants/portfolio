@@ -213,12 +213,15 @@ function cliRepo() {
   for (const id of ['payments', 'consumer']) {
     const out = join(dir, 'dist', id);
     const v = JSON.parse(readFileSync(join(REPO, 'versions', id, 'version.json'), 'utf8'));
+    // The test résumés say 46%, so the copy's settings say it too: the real figures are ENG-09 data.
+    v.approvedNumbers = ['46%'];
+    writeFileSync(join(dir, 'versions', id, 'version.json'), JSON.stringify(v));
     mkdirSync(out, { recursive: true });
     writeFileSync(
       join(out, 'index.html'),
       `<!DOCTYPE html><html lang="en"><head><title>T</title></head><body><h1>Portfolio</h1><p>${v.heroSubline.replace('&', '&amp;')}</p></body></html>\n`,
     );
-    copyFileSync(join(REPO, 'versions', id, 'resume.pdf'), join(out, 'Aditya-Gupta-Resume.pdf'));
+    copyFileSync(join(PRIVATE, 'resumes', `${id}.pdf`), join(out, 'Aditya-Gupta-Resume.pdf'));
     copyFileSync(join(REPO, 'versions', id, 'og.png'), join(out, 'og.png'));
     writeFileSync(join(out, '_headers'), `# ${id}: header stub\n`);
     writeFileSync(join(out, 'robots.txt'), 'User-agent: *\nDisallow: /\n');
@@ -246,11 +249,11 @@ describe('the verify command', () => {
     try {
       const r = cli(dir, 'dist/payments');
       expect(r.status, r.out).toBe(0);
-      expect(r.out).toMatch(/verify: 16 rules passed, 10 checks pending on dist\/payments/);
+      expect(r.out).toMatch(/verify: 16 rules passed, 9 checks pending on dist\/payments/);
       expect(r.out).toMatch(/… VF-14\/disclaimer pending \(ENG-20\)/);
       const c = cli(dir, 'dist/consumer');
       expect(c.status, c.out).toBe(0);
-      expect(c.out).toMatch(/verify: 16 rules passed, 13 checks pending on dist\/consumer/);
+      expect(c.out).toMatch(/verify: 16 rules passed, 12 checks pending on dist\/consumer/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

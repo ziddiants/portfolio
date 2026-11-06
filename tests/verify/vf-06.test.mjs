@@ -21,6 +21,12 @@ const FORBIDDEN = [
   'content-sources.md',
   'Past Mistakes and Lessons.md',
   'project-CLAUDE.md',
+  // The résumé keeps the phone number (D88): never tracked, under any usual name.
+  'resume.pdf',
+  'versions/payments/resume.pdf',
+  'Aditya-Gupta-Resume.pdf',
+  'dist/payments/Aditya-Gupta-Resume.pdf',
+  'Resume-2026.PDF',
 ];
 const FINE = [
   'README.md',
@@ -28,6 +34,8 @@ const FINE = [
   'package.json',
   'environment.md',
   'tests/fixtures/pages-a07/404.html',
+  'public/case-studies/Vendrax.pdf', // a cohort PDF is not a résumé
+  'docs/resumed.md',
 ];
 
 describe('VF-06 forbidden files in git', () => {

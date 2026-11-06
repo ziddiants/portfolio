@@ -1,12 +1,21 @@
 // Builds .build/public-<id>/ for one version: the shared public/ folder, that version's
-// résumé (always served as Aditya-Gupta-Resume.pdf, L1) and preview image, then its
+// résumé from the private folder (always served as Aditya-Gupta-Resume.pdf, L1; a stub in CI, D90) and preview image, then its
 // _headers and robots.txt. Nothing from any other version is copied (V3).
 //
 // Usage: node scripts/assemble-public.mjs <id>
-import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, rmSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadVersion, VersionError } from '../versions/load.mjs';
+import { resolveResume, stubResumePdf } from '../versions/resume.mjs';
 import { writeHeaders } from './write-headers.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -37,7 +46,14 @@ export function assemblePublic(id) {
       },
     });
   }
-  copyFileSync(join(settings.dir, settings.resumeFile), join(outDir, RESUME_NAME));
+  let resume;
+  try {
+    resume = resolveResume(settings.id);
+  } catch (err) {
+    throw new VersionError(err.message);
+  }
+  if (resume.kind === 'real') copyFileSync(resume.path, join(outDir, RESUME_NAME));
+  else writeFileSync(join(outDir, RESUME_NAME), stubResumePdf()); // CI only (D90)
   copyFileSync(join(settings.dir, settings.ogImage), join(outDir, 'og.png'));
   writeHeaders(settings, outDir);
   return outDir;

@@ -3,6 +3,10 @@ dist/
 .build/
 .astro/
 
+# Résumés keep the phone number: they live in the private vault, never here (D88, D89)
+resume*.pdf
+Aditya-Gupta-Resume*.pdf
+
 # Raw inputs — private source files (DOCX, PDFs) placed for processing
 .inputs/
 
