@@ -7,7 +7,6 @@
   "carinfoBullets": [
     "Designed and built multi-gateway payment routing from the ground up, integrating 3 PGs with an auto-switch failover mechanism I ideated, lifting UPI/netbanking success from 45% to 63%, cutting ~₹2.5L/month in failed-transaction losses and growing revenue 16%.",
     "Shipped an ad-free subscription, pricing the tiers off a cost-volume-profit analysis, with post-payment prompts that doubled repeat usage from 1.3x to 2x per user/month.",
-    "Surfaced ₹20–25L in previously untracked PG/vendor dues, then negotiated a recovery settlement: partial cash repayment plus the remainder traded against usage-based pricing terms.",
     "Rebuilt the insurance funnel with a partner-status API and automatic partner-switching, tripling conversions and meaningfully cutting drop-offs; owned WhatsApp campaigns end-to-end as a primary driver of marketing-led sales.",
     "Launched a Service History product from zero, scaling to 300+ daily orders with compliant vendor-payout and settlement workflows."
   ],
@@ -22,7 +21,6 @@
     "5x",
     "1.3x",
     "2x",
-    "₹20–25L",
     "6%",
     "₹8L",
     "₹4L",
