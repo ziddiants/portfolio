@@ -55,6 +55,8 @@ fake_private="$tmp/private" # removed by the cleanup trap
 mkdir -p "$fake_private"
 printf '# made up\nZorvath Quell\n' >"$fake_private/names.txt"
 printf '| ID | Source |\n| --- | --- |\n| S-001 | test |\n' >"$fake_private/content-sources.md"
+# A fake clean résumé per version (D89), holding that version's own approved numbers.
+node -e "import('./tests/fake-resumes.mjs').then((m) => m.writeFakeResumes(process.argv[1]))" "$fake_private"
 if PORTFOLIO_PRIVATE_DIR="$fake_private" VERIFY_MODE= npm run build >"$out" 2>&1; then
   for id in $versions; do [ -f "dist/$id/index.html" ] || missing="$missing $id"; done
 else

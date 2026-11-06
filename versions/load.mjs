@@ -76,7 +76,7 @@ export function loadVersion(id, versionsDir = VERSIONS_DIR) {
   if (settings.id !== id) {
     throw new VersionError(`${where}: id is "${settings.id}" but the folder is "${id}"`);
   }
-  for (const name of [settings.resumeFile, settings.ogImage]) {
+  for (const name of [settings.ogImage]) {
     const path = join(dir, name);
     if (!existsSync(path)) throw new VersionError(`versions/${id}/${name} not found`);
     // A symlink could pull a private file (or another version's résumé) into the build.

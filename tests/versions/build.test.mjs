@@ -9,6 +9,7 @@ import {
   cpSync,
   existsSync,
   lstatSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -20,6 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
+import { stubResumePdf, writeManifest } from '../../versions/resume.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 // Only the regular files git sees (tracked, or new and not ignored): never CLAUDE.md, .env,
@@ -38,6 +40,12 @@ function makeCopy() {
   copies.push(dir);
   for (const file of FILES) cpSync(join(REPO, file), join(dir, file));
   symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  // The real figures are ENG-09 data: the copy's settings use the test résumé's figure instead.
+  for (const id of ['payments', 'consumer']) {
+    const file = join(dir, 'versions', id, 'version.json');
+    const settings = JSON.parse(readFileSync(file, 'utf8'));
+    writeFileSync(file, JSON.stringify({ ...settings, approvedNumbers: ['46%'] }));
+  }
   // VF-16 and VF-06 read git, so the copy must be a real repository. A symlink is not matched by
   // the "node_modules/" rule in .gitignore, so it is excluded by hand.
   const git = (...args) =>
@@ -55,6 +63,12 @@ function makeCopy() {
 const PRIVATE = mkdtempSync(join(tmpdir(), 'eng04-private-'));
 copies.push(PRIVATE);
 writeFileSync(join(PRIVATE, 'names.txt'), '# made up\nZorvath Quell\n');
+// A clean résumé per version (D89). Made-up text; VF-08 is satisfied by the test's own settings.
+mkdirSync(join(PRIVATE, 'resumes'));
+for (const id of ['payments', 'consumer']) {
+  writeFileSync(join(PRIVATE, 'resumes', `${id}.pdf`), stubResumePdf(['Payment success 46%.']));
+}
+writeManifest(PRIVATE, ['payments', 'consumer']);
 writeFileSync(
   join(PRIVATE, 'content-sources.md'),
   '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
@@ -124,7 +138,7 @@ describe('a full build', () => {
     for (const id of ['payments', 'consumer']) {
       assert.ok(existsSync(join(dir, 'dist', id, 'index.html')), `dist/${id}/index.html`);
       // All 16 rules ran on this version; every check passed or is pending (D70, D80).
-      const pending = id === 'payments' ? 10 : 13;
+      const pending = id === 'payments' ? 9 : 12;
       assert.match(
         result.out,
         new RegExp(`verify: 16 rules passed, ${pending} checks pending on dist/${id}\\b`),
@@ -142,7 +156,7 @@ describe('a full build', () => {
       const out = join(dir, 'dist', id);
       assert.deepEqual(
         readFileSync(join(out, 'Aditya-Gupta-Resume.pdf')),
-        readFileSync(join(dir, 'versions', id, 'resume.pdf')),
+        readFileSync(join(PRIVATE, 'resumes', `${id}.pdf`)),
       );
       assert.deepEqual(
         readFileSync(join(out, 'og.png')),
@@ -265,14 +279,32 @@ describe('TC-A04: a bad setup stops the build with its § Multi-version message'
     assert.ok(!existsSync(join(dir, 'dist')), 'a bad consumer file stops payments too');
   });
 
-  test('a missing résumé', () => {
-    const file = join(dir, 'versions', 'payments', 'resume.pdf');
-    const original = readFileSync(file);
-    rmSync(file);
-    const r = buildAll(dir, 'payments');
-    writeFileSync(file, original);
+  test('a missing résumé stops a local build and names the fix (D89)', () => {
+    const empty = mkdtempSync(join(tmpdir(), 'eng09-empty-'));
+    copies.push(empty);
+    writeFileSync(join(empty, 'names.txt'), 'Zorvath Quell\n');
+    const r = run(dir, ['node', 'scripts/build-all.mjs', 'payments'], {
+      PORTFOLIO_PRIVATE_DIR: empty,
+      CI: '',
+    });
     assert.equal(r.status, 1);
-    assert.match(r.out, /versions\/payments\/resume\.pdf not found/);
+    assert.match(r.out, /no résumé for "payments" at .*resumes[\\/]payments\.pdf/);
+    assert.match(r.out, /npm run resume:prepare/);
+  });
+
+  test('CI with no private folder builds a stub résumé and verify:ci passes (D90)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'eng09-home-'));
+    copies.push(home);
+    const d = makeCopy();
+    const r = run(d, ['node', 'scripts/build-all.mjs', 'payments'], {
+      HOME: home,
+      PORTFOLIO_PRIVATE_DIR: '',
+      CI: 'true',
+      VERIFY_MODE: 'ci',
+    });
+    assert.equal(r.status, 0, r.out);
+    const pdf = readFileSync(join(d, 'dist', 'payments', 'Aditya-Gupta-Resume.pdf'), 'latin1');
+    assert.match(pdf, /CI stub, not a resume/);
   });
 });
 

@@ -182,7 +182,13 @@ export function hostOf(url) {
  * goes in `urls`, never in `domains`: a whole domain would let any private doc through (D87).
  */
 export function loadAllow(file) {
-  const raw = JSON.parse(readFileSync(file, 'utf8'));
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    // The parse error quotes the start of the text, and the private allow file holds an address.
+    throw new Error(`${file}: is not valid JSON (the message does not show the text)`);
+  }
   const list = (name) => {
     const v = raw[name];
     if (
@@ -257,8 +263,11 @@ const ACTIONS = new Set([
  * Every finding (stops the run) and note (information) for one PDF in workDir.
  * `names` is the result of nameMatchers(); `nameWords` the set of words of names.txt, used to
  * mask a sentence before it is printed.
+ * `resume` is set for a résumé (ENG-09, D88): its page text may hold the number `resume.ownPhone`
+ * (last 10 digits, or null for none), and the "we" rule (step 5) does not apply to it. Links,
+ * strings, metadata and any other number are scanned as for every file.
  */
-export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
+export function scanPdf(workDir, file, source, { names, nameWords, allow, resume = null }) {
   const ctx = { distDir: workDir };
   const findings = [];
   const notes = [];
@@ -315,7 +324,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
   const shown = (t, what) => (holdsPrivate(t) ? `a ${what} that holds a name or a number` : t);
 
   const NAME_FIX = 'remove it in the source document, export the PDF again, and run this again';
-  const scanText = (text, page) => {
+  const scanText = (text, page, pageText = false) => {
     const hay = key(text);
     for (const e of names.entries) {
       if (e.re.test(hay))
@@ -328,7 +337,7 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
           NAME_FIX,
         );
     }
-    for (const p of phonesIn(text)) {
+    for (const p of phonesIn(text, pageText ? (resume?.ownPhone ?? null) : null)) {
       add(
         4,
         'phone',
@@ -376,9 +385,9 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
     }
   };
 
-  pages.forEach((text, i) => scanText(text, i + 1));
+  pages.forEach((text, i) => scanText(text, i + 1, true));
   // A name or a number split across a page break reads as one in the joined text.
-  scanText(pages.join('\n'), JOINED);
+  scanText(pages.join('\n'), JOINED, true);
 
   // Link annotations: a link's target has no visible text. A reader error is a finding: the
   // links are then unchecked, so the file must not pass.
@@ -511,10 +520,11 @@ export function scanPdf(workDir, file, source, { names, nameWords, allow }) {
     });
   }
 
-  // Step 5: the "we" rule.
+  // Step 5: the "we" rule (cohort PDFs only: a résumé is first person by nature).
   const mask = (s) =>
     s.replace(/[\p{L}][\p{L}'’-]*/gu, (w) => (nameWords.has(key(w)) ? '[NAME]' : w));
   pages.forEach((text, i) => {
+    if (resume) return;
     for (const s of sentences(text)) {
       if (!RESEARCH.test(s)) continue;
       const said = holdsPrivate(s)
@@ -563,7 +573,7 @@ function tool(cmd, args, install) {
 const TRAILER_KEYS = new Set(['/Root', '/Info', '/Size']);
 
 /**
- * Writes workDir/clean/<id>.pdf with Title <id>, Author "Aditya Gupta" and no other metadata.
+ * Writes workDir/clean/<id>.pdf with Title `title` (default <id>), Author "Aditya Gupta" and no other metadata.
  * exiftool removes every tag and writes the two fields into the Info dictionary in one pass, but
  * a PDF edit by exiftool only appends a new revision: the old values stay in the bytes. qpdf then
  * rewrites the file from the objects in use, so the old revision is gone, and keeps only the
@@ -573,7 +583,7 @@ const TRAILER_KEYS = new Set(['/Root', '/Info', '/Size']);
  * checks in checkClean() decide whether the result is good. Tool output is never printed: it can
  * quote a metadata value.
  */
-export function cleanMetadata(file, id, workDir) {
+export function cleanMetadata(file, id, workDir, title = id) {
   const stripped = join(workDir, 'exif', `${id}.pdf`);
   const out = join(workDir, 'clean', `${id}.pdf`);
   mkdirSync(join(workDir, 'exif'), { recursive: true });
@@ -582,7 +592,7 @@ export function cleanMetadata(file, id, workDir) {
   rmSync(out, { force: true });
   const ex = tool(
     'exiftool',
-    ['-q', '-q', '-all=', `-PDF:Title=${id}`, `-PDF:Author=${AUTHOR}`, '-o', stripped, file],
+    ['-q', '-q', '-all=', `-PDF:Title=${title}`, `-PDF:Author=${AUTHOR}`, '-o', stripped, file],
     'brew install exiftool',
   );
   // Checked by the output file too: a tool can exit 0 and write nothing.
@@ -629,6 +639,31 @@ const byteForms = (w) => {
     Buffer.from(w, 'latin1').toString('hex'),
   ].map((s) => s.toLowerCase());
 };
+
+// Standard PDF names of 4 or more letters. A word that is one of these, written as a name
+// ("/Pages"), is structure, not a metadata value.
+const PDF_NAMES = new Set(
+  (
+    'pages page font type catalog outlines info root size count kids parent contents resources ' +
+    'length subtype annots metadata title author subject keywords creator producer marked lang ' +
+    'names dests mediabox cropbox rotate filter width height image form widget link action ' +
+    'border rect structtreeroot markinfo xobject extgstate procset colorspace encoding'
+  ).split(' '),
+);
+
+/**
+ * Whether the bytes hold a word, in one of its forms from byteForms(). The plain form does not
+ * count when it is a standard PDF name with a "/" right before it (/Pages: a Creator of "Pages"
+ * is a real case, ENG-09). Any other word after a "/" counts, because paths and links keep old
+ * values there (/Users/<name>/Desktop): a review finding.
+ */
+export function holdsWord(hay, [plain, ...others]) {
+  if (others.some((s) => hay.includes(s))) return true;
+  for (let i = hay.indexOf(plain); i !== -1; i = hay.indexOf(plain, i + 1)) {
+    if (hay[i - 1] !== '/' || !PDF_NAMES.has(plain)) return true;
+  }
+  return false;
+}
 
 /**
  * Checks the files in workDir/clean/ after step 6. VF-04 runs on them as it runs on the site.
@@ -681,7 +716,7 @@ export function checkClean(workDir, files, scan) {
       const words = (old[field] ?? '')
         .split(/[^\p{L}\p{N}]+/u)
         .filter((w) => w.length >= 4 && !allowed.has(key(w)));
-      if (words.some((w) => byteForms(w).some((s) => hay.includes(s)))) {
+      if (words.some((w) => holdsWord(hay, byteForms(w)))) {
         fail(`still holds the old ${field} value in its bytes`);
       }
     }
@@ -770,6 +805,41 @@ export function writeOutputs(files, outDir) {
 // ── The run ─────────────────────────────────────────────────────────────────────────────────
 
 /**
+ * The names list as the scan needs it: { names, nameWords, findings, stop }. A missing or empty
+ * names.txt stops the run (`stop`); a line that cannot be matched is a finding (step 4). Shared by
+ * the cohort pipeline and the résumé intake, so both read the list the same way.
+ */
+export function loadNames(privateDir) {
+  const findings = [];
+  const state = privateState(privateDir, 'names.txt');
+  if (state !== 'ok') {
+    findings.push({
+      step: 4,
+      check: 'names',
+      file: 'names.txt',
+      message: `the private names list is ${state}, so the PDFs cannot be name-checked`,
+      fix: 'put names.txt in the private folder ($PORTFOLIO_PRIVATE_DIR or ~/my_builds/portfolio/private)',
+    });
+    return { findings, stop: true };
+  }
+  const lines = privateLines(privateDir, 'names.txt');
+  const names = nameMatchers(lines);
+  for (const line of names.unmatchable) {
+    findings.push({
+      step: 4,
+      check: 'names',
+      file: 'names.txt',
+      message: `line ${line} has no Latin letter or digit, so it cannot be checked`,
+      fix: 'write the name in Latin letters too (one spelling per line)',
+    });
+  }
+  const nameWords = new Set(
+    lines.flatMap((l) => key(l.text).split(' ')).filter((w) => w.length > 2),
+  );
+  return { names, nameWords, findings, stop: false };
+}
+
+/**
  * Steps 1–9 over every input. Returns { findings, notes, files }; any finding means the run
  * failed and nothing was written. A missing or empty names list is a finding, never a skip.
  * Each step runs only when the steps before it found nothing, and step 8 writes only after
@@ -786,31 +856,10 @@ export function prepare({
   const findings = [];
   const notes = [];
   const files = [];
-  const state = privateState(privateDir, 'names.txt');
-  if (state !== 'ok') {
-    findings.push({
-      step: 4,
-      check: 'names',
-      file: 'names.txt',
-      message: `the private names list is ${state}, so the PDFs cannot be name-checked`,
-      fix: 'put names.txt in the private folder ($PORTFOLIO_PRIVATE_DIR or ~/my_builds/portfolio/private)',
-    });
-    return { findings, notes, files };
-  }
-  const lines = privateLines(privateDir, 'names.txt');
-  const names = nameMatchers(lines);
-  for (const line of names.unmatchable) {
-    findings.push({
-      step: 4,
-      check: 'names',
-      file: 'names.txt',
-      message: `line ${line} has no Latin letter or digit, so it cannot be checked`,
-      fix: 'write the name in Latin letters too (one spelling per line)',
-    });
-  }
-  const nameWords = new Set(
-    lines.flatMap((l) => key(l.text).split(' ')).filter((w) => w.length > 2),
-  );
+  const loaded = loadNames(privateDir);
+  if (loaded.stop) return { findings: loaded.findings, notes, files };
+  findings.push(...loaded.findings);
+  const { names, nameWords } = loaded;
   const allow = loadAllow(allowFile);
 
   const step1 = collectInputs(inputsDir);

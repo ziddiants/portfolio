@@ -1,12 +1,12 @@
 // VF-03 tests (ENG-07, TC-B03, TC-A06): another version's résumé file (under any name), bullet,
 // subline (with "&", which Astro writes as "&amp;"), address and project name each fail; text both
 // versions share passes.
-import { readFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import vf03 from '../../scripts/verify/rules/vf-03.mjs';
-import { golden, resumePdf } from './golden.mjs';
-import { fakeVersion, ids } from './helpers.mjs';
+import { golden, privateFiles, resumePdf } from './golden.mjs';
+import { fakePrivate, fakeVersion, ids } from './helpers.mjs';
 
 const beta = fakeVersion('beta', { analyticsToken: 'beta0analytics0token' });
 const page = (html, extra = {}) =>
@@ -19,13 +19,15 @@ const esc = (s) => s.replace(/&/g, '&amp;');
 
 describe('VF-03 version isolation', () => {
   test("the other version's résumé, renamed, fails (by checksum)", () => {
+    const priv = fakePrivate(privateFiles());
     const ctx = golden({
       others: [beta],
-      files: { 'files/cv.pdf': readFileSync(join(beta.dir, 'resume.pdf')) },
+      privateDir: priv,
+      files: { 'files/cv.pdf': readFileSync(join(priv, 'resumes', 'beta.pdf')) },
     });
     const found = vf03.run(ctx);
     expect(ids(found)).toEqual(['other-file files/cv.pdf']);
-    expect(found[0].message).toBe('is a copy of versions/beta/resume.pdf');
+    expect(found[0].message).toBe('is a copy of the beta résumé');
   });
 
   test("the other version's preview image fails too", () => {
@@ -86,5 +88,31 @@ describe('VF-03 version isolation', () => {
 
   test('a longer word that holds the project name passes', () => {
     expect(vf03.run(page('<p>beta-tested and alpha-beta-test-suite</p>'))).toEqual([]);
+  });
+});
+
+describe('VF-03 and the other version’s résumé in the private folder (D89, D90)', () => {
+  test('a missing other résumé fails in local mode: never a pass', () => {
+    const priv = fakePrivate(privateFiles());
+    rmSync(join(priv, 'resumes', 'beta.pdf'));
+    const found = vf03.run(golden({ others: [beta], privateDir: priv }));
+    expect(ids(found)).toEqual(['other-file']);
+    expect(found[0].message).toMatch(/cannot check the beta résumé/);
+  });
+  test('in CI mode (no private folder) it is skipped', () => {
+    const priv = fakePrivate(privateFiles());
+    rmSync(join(priv, 'resumes', 'beta.pdf'));
+    expect(vf03.run(golden({ others: [beta], mode: 'ci', privateDir: priv }))).toEqual([]);
+  });
+  test('this version’s own résumé is never foreign, even if the other one is identical', () => {
+    const priv = fakePrivate(privateFiles());
+    const same = readFileSync(join(priv, 'resumes', 'alpha.pdf'));
+    writeFileSync(join(priv, 'resumes', 'beta.pdf'), same);
+    const ctx = golden({
+      others: [beta],
+      privateDir: priv,
+      files: { 'Aditya-Gupta-Resume.pdf': same },
+    });
+    expect(vf03.run(ctx)).toEqual([]);
   });
 });

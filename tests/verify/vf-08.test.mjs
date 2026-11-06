@@ -100,3 +100,22 @@ describe('VF-08 approved numbers', () => {
     expect(normFigure('10–46 per cent')).toBe('10-46%');
   });
 });
+
+describe('VF-08 in CI mode (D90)', () => {
+  const stub = {
+    'Aditya-Gupta-Resume.pdf': resumePdf({ text: 'CI stub, not a resume.\nNothing else here.' }),
+  };
+  test('the résumé checks are skipped: the CI résumé is a stub with no figures', () => {
+    const ctx = golden({ mode: 'ci', files: stub });
+    expect(vf08.run(ctx)).toEqual([]);
+  });
+  test('a figure on a page is still checked in CI mode', () => {
+    const ctx = inPage('<p>Success rose to 45%.</p>', { mode: 'ci', files: stub });
+    expect(ids(vf08.run(ctx))).toEqual(['figures index.html']);
+  });
+  test('local mode runs the résumé checks on the same stub and fails', () => {
+    const ctx = golden({ mode: 'local', files: stub });
+    expect(ids(vf08.run(ctx)).every((i) => i.startsWith('approved-in-resume'))).toBe(true);
+    expect(vf08.run(ctx).length).toBeGreaterThan(0);
+  });
+});

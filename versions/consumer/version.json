@@ -4,10 +4,37 @@
   "pagesProject": "aditya-consumerapp-pm",
   "pageTitle": "Aditya Gupta · Product Manager, Consumer Apps",
   "heroSubline": "Product Manager · consumer apps & monetization · now building with AI",
-  "carinfoBullets": ["PLACEHOLDER (ENG-09): consumer CarInfo bullets from the Consumer résumé"],
-  "resumeFile": "resume.pdf",
+  "carinfoBullets": [
+    "Overhauled the sign-up flow, increasing login completion from 71% to 93% and mapping profiles for 89% of total MAU. This led to a daily increase of 300 orders.",
+    "Streamlined the onboarding journey, raising the activation rate by 20% and improving D1 retention from 17% to 22%. Implemented push notifications strategy that boosted the top-of-funnel for four key services by an average of 10%.",
+    "Spearheaded \"Car Service History Records”, generating ₹30 Lacs in MRR in three months. Onboarded 12 vendors and built a fulfillment dashboard, cutting the TAT for 340+ daily orders to 15 minutes.",
+    "Introduced \"CarInfo Gold”, a VIP pass that reactivated 24% of churned users, tripled average sessions per user, and achieved a 40% renewal rate among power users. Strategic cross-sells and dynamic pricing boosted ARPU by 14%.",
+    "Designed and built multi-gateway payment routing from the ground up, integrating 3 PGs with an auto-switch failover mechanism I ideated, lifting UPI/netbanking success from 45% to 63%, cutting ~₹2.5L/month in failed-transaction losses and growing revenue 16%."
+  ],
   "ogImage": "og.png",
   "indexable": false,
   "analyticsToken": "PLACEHOLDER (ADI-02): consumer analytics token",
-  "approvedNumbers": ["PLACEHOLDER (ENG-09): consumer approved numbers"]
+  "approvedNumbers": [
+    "71%",
+    "93%",
+    "89%",
+    "20%",
+    "17%",
+    "22%",
+    "10%",
+    "₹30 Lacs",
+    "24%",
+    "40%",
+    "14%",
+    "45%",
+    "63%",
+    "₹2.5L",
+    "16%",
+    "5x",
+    "6%",
+    "₹8L",
+    "₹4L",
+    "₹600 Cr",
+    "60%"
+  ]
 }

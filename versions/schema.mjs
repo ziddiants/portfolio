@@ -26,7 +26,6 @@ export const versionSchema = z
     pageTitle: text,
     heroSubline: text,
     carinfoBullets: list('must list at least one bullet'),
-    resumeFile: fileName,
     ogImage: fileName,
     indexable: z.boolean({ error: 'must be true or false' }),
     analyticsToken: text,

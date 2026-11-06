@@ -10,6 +10,11 @@ export const FORBIDDEN = [
   /(^|\/)\.inputs\//i,
   /(^|\/)names\.txt$/i,
   /(^|\/)private\//i,
+  // The résumé keeps the phone number: never in git, under any name (D88, ENG-09 review).
+  /(^|[/ _.-])(r[eé]sum[eé]s?|cv)([ _.-][^/]*)?\.pdf$/i,
+  /(^|\/)r[eé]sum[eé]s\//i,
+  // The only PDFs in git are the three case studies (ENG-08); any other PDF is a stray.
+  /^(?!public\/case-studies\/[^/]+\.pdf$).*\.pdf$/i,
   /\.private\./i,
   /(^|\/)(PRD|PRD-Brief|Architecture|design-brand|build-plan|content-sources|content-pack|alignment-audit)\.md$/i,
   /(^|\/)Past Mistakes and Lessons\.md$/i,
