@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.0.0",
-  "description": "Aditya Gupta portfolio \u2014 two static Astro sites built from one codebase.",
+  "description": "Aditya Gupta portfolio — two static Astro sites built from one codebase.",
   "engines": {
     "node": ">=22.23.4"
   },
@@ -29,6 +29,7 @@
     "test:pages": "node --test 'tests/pages/*.test.mjs'",
     "verify": "node scripts/verify/index.mjs",
     "verify:ci": "node scripts/verify/index.mjs --ci",
+    "pdf:prepare": "node scripts/pdf/prepare.mjs",
     "test:unit": "vitest run"
   },
   "dependencies": {

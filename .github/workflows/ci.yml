@@ -42,12 +42,15 @@ jobs:
           gitleaks version
 
       # VF-01, VF-02, VF-03, VF-04 and VF-08 read PDFs with pdftotext and pdfinfo (ENG-07).
-      # The runner image has no poppler; without it those rules fail, never pass.
-      - name: Install poppler (pdftotext, pdfinfo)
+      # The PDF pipeline tests (ENG-08) also need qpdf (object read, rewrite) and exiftool.
+      # The runner image has none of them; without them those checks fail, never pass.
+      - name: Install poppler, qpdf and exiftool
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends poppler-utils
+          sudo apt-get install -y -q --no-install-recommends poppler-utils qpdf libimage-exiftool-perl
           pdftotext -v
+          qpdf --version
+          exiftool -ver
 
       - run: npm ci
       - run: git config core.hooksPath .githooks

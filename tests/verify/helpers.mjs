@@ -125,10 +125,12 @@ export function siteCtx(distDir, extra = {}) {
 }
 
 /**
- * A small, valid PDF made by hand: one page of Helvetica text (ASCII only), an Info dictionary
- * (Author, Creator, any custom key, …) and, if asked: a catalog XMP stream (`xmp`), a catalog
- * metadata stream with any content (`metadata`), an XMP stream on the page (`pageXmp`) and link
- * annotations (`links`, a list of URIs). pdftotext and pdfinfo read it.
+ * A small, valid PDF made by hand: Helvetica text (ASCII only; a form feed "\f" starts a new
+ * page), an Info dictionary (Author, Creator, any custom key, …) and, if asked: a catalog XMP
+ * stream (`xmp`), a catalog metadata stream with any content (`metadata`), an XMP stream on the
+ * page (`pageXmp`), link annotations on page 1 (`links`, a list of URIs), other annotations on
+ * page 1 (`annots`, raw dictionaries) and extra catalog entries (`catalog`, raw text).
+ * pdftotext and pdfinfo read it.
  */
 export function makePdf({
   text = 'Aditya Gupta, product manager',
@@ -137,34 +139,74 @@ export function makePdf({
   metadata = null,
   pageXmp = null,
   links = [],
+  annots = [],
+  catalog = '',
+  image = false,
+  content = '',
+  trailer = '',
 } = {}) {
   const esc = (s) => s.replace(/([\\()])/g, '\\$1');
-  const lines = text
-    .split('\n')
-    .map((l) => `(${esc(l)}) Tj T*`)
-    .join(' ');
-  const content = `BT /F1 11 Tf 14 TL 72 720 Td ${lines} ET`;
+  const contentOf = (pageText) =>
+    `BT /F1 11 Tf 14 TL 72 720 Td ${pageText
+      .split('\n')
+      .map((l) => `(${esc(l)}) Tj T*`)
+      .join(' ')} ET`;
+  const [first, ...more] = text.split('\f');
   const stream = (dict, body) => `<< ${dict} /Length ${body.length} >>\nstream\n${body}\nendstream`;
   const catalogMeta = xmp ?? metadata;
-  // Objects 1–7 are fixed; links follow as 8, 9, …
-  const annots = links.map((_, i) => `${8 + i} 0 R`).join(' ');
+  const pageDict = (contents, extra = '', xobject = '') =>
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >>' +
+    `${xobject} >> /Contents ${contents} 0 R${extra} >>`;
+  // Objects 1–7 are fixed; annotations follow as 8, 9, …; then one page and its content per
+  // extra page; then, with `image`, one 1×1 grey image drawn on page 1.
+  const annotDicts = [
+    ...links.map(
+      (uri) =>
+        `<< /Type /Annot /Subtype /Link /Rect [72 700 200 720] /A << /S /URI /URI (${esc(uri)}) >> >>`,
+    ),
+    ...annots,
+  ];
+  const annotRefs = annotDicts.map((_, i) => `${8 + i} 0 R`).join(' ');
+  const firstExtra = 8 + annotDicts.length;
+  const extraPages = more.flatMap((t, i) => [
+    pageDict(firstExtra + 2 * i + 1),
+    stream('', contentOf(t)),
+  ]);
+  const kids = ['3 0 R', ...more.map((_, i) => `${firstExtra + 2 * i} 0 R`)];
+  const imageObj = firstExtra + 2 * more.length;
+  const drawImage = image ? ' q 10 0 0 10 72 600 cm /Im1 Do Q' : '';
   const objs = [
-    `<< /Type /Catalog /Pages 2 0 R${catalogMeta !== null ? ' /Metadata 6 0 R' : ''} >>`,
-    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >>' +
-      ` /Contents 5 0 R${pageXmp ? ' /Metadata 6 0 R' : ''}${links.length ? ` /Annots [${annots}]` : ''} >>`,
+    `<< /Type /Catalog /Pages 2 0 R${catalogMeta !== null ? ' /Metadata 6 0 R' : ''}${catalog ? ` ${catalog}` : ''} >>`,
+    `<< /Type /Pages /Kids [${kids.join(' ')}] /Count ${kids.length} >>`,
+    pageDict(
+      5,
+      `${pageXmp ? ' /Metadata 6 0 R' : ''}${annotDicts.length ? ` /Annots [${annotRefs}]` : ''}`,
+      image ? ` /XObject << /Im1 ${imageObj} 0 R >>` : '',
+    ),
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
-    stream('', content),
+    stream('', `${contentOf(first)}${drawImage}${content ? ` ${content}` : ''}`),
     catalogMeta !== null || pageXmp
       ? stream('/Type /Metadata /Subtype /XML', catalogMeta ?? pageXmp)
       : '<< >>',
     `<< ${Object.entries(info)
       .map(([k, v]) => `/${k} (${esc(v)})`)
       .join(' ')} >>`,
-    ...links.map(
-      (uri) =>
-        `<< /Type /Annot /Subtype /Link /Rect [72 700 200 720] /A << /S /URI /URI (${esc(uri)}) >> >>`,
-    ),
+    ...annotDicts,
+    ...extraPages,
+    ...(image
+      ? [
+          // `image` is true (a raw grey pixel) or the bytes of a JPEG (stored as DCTDecode).
+          Buffer.isBuffer(image)
+            ? stream(
+                '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /DCTDecode',
+                image.toString('latin1'),
+              )
+            : stream(
+                '/Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceGray /BitsPerComponent 8',
+                '\x80',
+              ),
+        ]
+      : []),
   ];
   let out = '%PDF-1.4\n';
   const offsets = objs.map((body, i) => {
@@ -175,7 +217,7 @@ export function makePdf({
   const xref = out.length;
   out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
   out += offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('');
-  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 7 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 7 0 R${trailer ? ` ${trailer}` : ''} >>\nstartxref\n${xref}\n%%EOF\n`;
   return Buffer.from(out, 'latin1');
 }
 
