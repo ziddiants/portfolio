@@ -4,15 +4,17 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stubResumePdf } from '../versions/resume.mjs';
+import { stubResumePdf, writeManifest } from '../versions/resume.mjs';
 
 const REPO = fileURLToPath(new URL('..', import.meta.url));
 
 export function writeFakeResumes(privateDir, root = REPO) {
   const versions = join(root, 'versions');
   mkdirSync(join(privateDir, 'resumes'), { recursive: true });
+  const ids = [];
   for (const e of readdirSync(versions, { withFileTypes: true })) {
     if (!e.isDirectory() || e.name.startsWith('.')) continue;
+    ids.push(e.name);
     const settings = JSON.parse(readFileSync(join(versions, e.name, 'version.json'), 'utf8'));
     // The PDF is Latin-1 text: the rupee sign is written the way VF-08 reads it ("Rs"), and a
     // dash as a hyphen (VF-08 compares both as one).
@@ -24,4 +26,5 @@ export function writeFakeResumes(privateDir, root = REPO) {
       stubResumePdf([`Test figures: ${figures}`]),
     );
   }
+  writeManifest(privateDir, ids);
 }

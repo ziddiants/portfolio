@@ -8,6 +8,8 @@ import { attrValues, binaryFiles, blocks, pages, textFiles } from '../lib/site.m
 import { fold } from '../lib/text.mjs';
 
 const RESUME = 'Aditya-Gupta-Resume.pdf';
+// What may stand before the 10 digits of his number: nothing, a trunk 0, or the country code.
+const OWN_PREFIX = /^(?:0|91|091|0091)?$/;
 
 // A digit run with the separators a phone number uses (spaces, dots, dashes, brackets). A digit
 // right before it, or a letter or digit right after it, means it is part of a longer token such
@@ -54,10 +56,14 @@ export function phonesIn(raw, own = null) {
   const out = [];
   for (const m of text.matchAll(CANDIDATE)) {
     const kind = phoneKind(m[0]);
-    const key = m[0].replace(/\D/g, '').slice(-10);
+    const digits = m[0].replace(/\D/g, '');
+    const key = digits.slice(-10);
     // `own` is Aditya's number (last 10 digits, D88): allowed where the caller passes it, which
-    // is the page text of the résumé and nowhere else. Any other number still counts.
-    if (kind && key !== own) out.push({ key, message: `holds ${kind} (${mask(m[0].trim())})` });
+    // is the page text of the résumé and nowhere else. Every digit of the run must be his number,
+    // with at most a country or trunk prefix: another number written right before or after his
+    // joins the same run and must not ride in with it (ENG-09 review, finding 1).
+    const isOwn = own !== null && OWN_PREFIX.test(digits.slice(0, -10)) && key === own;
+    if (kind && !isOwn) out.push({ key, message: `holds ${kind} (${mask(m[0].trim())})` });
   }
   if (/\btel:/i.test(text)) out.push({ key: 'tel:', message: 'holds a tel: link' });
   return out;

@@ -27,6 +27,18 @@ const FORBIDDEN = [
   'Aditya-Gupta-Resume.pdf',
   'dist/payments/Aditya-Gupta-Resume.pdf',
   'Resume-2026.PDF',
+  // Review finding 4: other names for the same file, and any PDF outside the case-study folder.
+  'Résumé.pdf',
+  'my-resume.pdf',
+  'CV.pdf',
+  'Aditya Gupta Resume.pdf',
+  'public/Aditya_Gupta_Resume.pdf',
+  'public/case-studies/Aditya-CV.pdf',
+  'resumes/payments.pdf',
+  'resumes/allow.json', // the private résumé allow file and manifest, if copied in
+  'resumes/manifest.json',
+  'docs/notes.pdf',
+  'tests/fixtures/sample.pdf',
 ];
 const FINE = [
   'README.md',
@@ -35,6 +47,8 @@ const FINE = [
   'environment.md',
   'tests/fixtures/pages-a07/404.html',
   'public/case-studies/Vendrax.pdf', // a cohort PDF is not a résumé
+  'public/case-studies/NyaySetu.pdf',
+  'src/curved.md',
   'docs/resumed.md',
 ];
 

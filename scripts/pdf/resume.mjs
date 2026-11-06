@@ -9,6 +9,7 @@ import { copyFileSync, lstatSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import vf04 from '../verify/rules/vf-04.mjs';
 import { ownPhone } from '../verify/lib/private.mjs';
+import { writeManifest } from '../../versions/resume.mjs';
 import {
   AUTHOR,
   checkClean,
@@ -172,6 +173,9 @@ export function prepareResumes({
       });
     }
   }
-  if (findings.length === 0) writeOutputs(files, join(privateDir, 'resumes'));
+  if (findings.length === 0) {
+    writeOutputs(files, join(privateDir, 'resumes'));
+    writeManifest(privateDir, ids);
+  }
   return { findings, notes, files };
 }

@@ -182,7 +182,13 @@ export function hostOf(url) {
  * goes in `urls`, never in `domains`: a whole domain would let any private doc through (D87).
  */
 export function loadAllow(file) {
-  const raw = JSON.parse(readFileSync(file, 'utf8'));
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(file, 'utf8'));
+  } catch {
+    // The parse error quotes the start of the text, and the private allow file holds an address.
+    throw new Error(`${file}: is not valid JSON (the message does not show the text)`);
+  }
   const list = (name) => {
     const v = raw[name];
     if (
@@ -634,15 +640,27 @@ const byteForms = (w) => {
   ].map((s) => s.toLowerCase());
 };
 
+// Standard PDF names of 4 or more letters. A word that is one of these, written as a name
+// ("/Pages"), is structure, not a metadata value.
+const PDF_NAMES = new Set(
+  (
+    'pages page font type catalog outlines info root size count kids parent contents resources ' +
+    'length subtype annots metadata title author subject keywords creator producer marked lang ' +
+    'names dests mediabox cropbox rotate filter width height image form widget link action ' +
+    'border rect structtreeroot markinfo xobject extgstate procset colorspace encoding'
+  ).split(' '),
+);
+
 /**
  * Whether the bytes hold a word, in one of its forms from byteForms(). The plain form does not
- * count when a "/" comes right before it: that is a PDF name such as /Pages, not a value. (A
- * Creator of "Pages" is a real case, ENG-09.) A value starts after "(", a space or a quote.
+ * count when it is a standard PDF name with a "/" right before it (/Pages: a Creator of "Pages"
+ * is a real case, ENG-09). Any other word after a "/" counts, because paths and links keep old
+ * values there (/Users/<name>/Desktop): a review finding.
  */
-function holdsWord(hay, [plain, ...others]) {
+export function holdsWord(hay, [plain, ...others]) {
   if (others.some((s) => hay.includes(s))) return true;
   for (let i = hay.indexOf(plain); i !== -1; i = hay.indexOf(plain, i + 1)) {
-    if (hay[i - 1] !== '/') return true;
+    if (hay[i - 1] !== '/' || !PDF_NAMES.has(plain)) return true;
   }
   return false;
 }

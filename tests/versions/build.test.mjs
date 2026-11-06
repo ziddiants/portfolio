@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
-import { stubResumePdf } from '../../versions/resume.mjs';
+import { stubResumePdf, writeManifest } from '../../versions/resume.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 // Only the regular files git sees (tracked, or new and not ignored): never CLAUDE.md, .env,
@@ -68,6 +68,7 @@ mkdirSync(join(PRIVATE, 'resumes'));
 for (const id of ['payments', 'consumer']) {
   writeFileSync(join(PRIVATE, 'resumes', `${id}.pdf`), stubResumePdf(['Payment success 46%.']));
 }
+writeManifest(PRIVATE, ['payments', 'consumer']);
 writeFileSync(
   join(PRIVATE, 'content-sources.md'),
   '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',

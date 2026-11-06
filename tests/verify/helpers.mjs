@@ -8,6 +8,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll } from 'vitest';
+import { writeManifest } from '../../versions/resume.mjs';
 
 const dirs = [];
 afterAll(() => {
@@ -76,6 +77,7 @@ export function fakePrivate(files = {}) {
     ]),
   );
   writeFiles(dir, { ...resumes, ...files });
+  writeManifest(dir, ['alpha', 'beta', 'payments', 'consumer']); // the build ships only these (D89)
   return dir;
 }
 

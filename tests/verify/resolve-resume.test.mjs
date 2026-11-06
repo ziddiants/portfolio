@@ -1,14 +1,25 @@
 // resolveResume (ENG-09, D89, D90): the one place that finds a version's résumé.
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { resolveResume, resumePath, STUB_MARKER, stubResumePdf } from '../../versions/resume.mjs';
+import {
+  resolveResume,
+  resumePath,
+  STUB_MARKER,
+  stubResumePdf,
+  writeManifest,
+} from '../../versions/resume.mjs';
 import { tempDir } from './helpers.mjs';
 
-const privateWith = (files = {}) => {
+const privateWith = (files = {}, manifest = true) => {
   const dir = tempDir('resume-private-');
   mkdirSync(join(dir, 'resumes'));
   for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, 'resumes', name), body);
+  if (manifest)
+    writeManifest(
+      dir,
+      Object.keys(files).map((n) => n.replace(/\.pdf$/, '')),
+    );
   return dir;
 };
 
@@ -54,6 +65,33 @@ describe('resolveResume', () => {
     const dir = privateWith();
     mkdirSync(join(dir, 'resumes', 'payments.pdf'));
     expect(() => resolveResume('payments', { privateDir: dir, env: {} })).toThrow(/not a link/);
+  });
+
+  test('a résumé that is not the file the intake wrote does not ship (review finding 2)', () => {
+    const dir = privateWith({ 'payments.pdf': 'as scanned' });
+    writeFileSync(join(dir, 'resumes', 'payments.pdf'), 'edited by hand afterwards');
+    for (const env of [{}, { CI: 'true' }]) {
+      expect(() => resolveResume('payments', { privateDir: dir, env })).toThrow(
+        /npm run resume:prepare/,
+      );
+    }
+  });
+
+  test('a résumé with no manifest entry, or no manifest, does not ship', () => {
+    const noFile = privateWith({ 'payments.pdf': 'x' }, false);
+    expect(() => resolveResume('payments', { privateDir: noFile, env: {} })).toThrow(/manifest/);
+    const other = privateWith({ 'payments.pdf': 'x', 'consumer.pdf': 'y' });
+    rmSync(join(other, 'resumes', 'manifest.json'));
+    writeFileSync(join(other, 'resumes', 'manifest.json'), '{ "consumer": "00" }');
+    expect(() => resolveResume('payments', { privateDir: other, env: {} })).toThrow(/manifest/);
+  });
+
+  test('a broken manifest stops the build and does not print its text', () => {
+    const dir = privateWith({ 'payments.pdf': 'x' });
+    writeFileSync(join(dir, 'resumes', 'manifest.json'), '{ "payments": "secret-text" ');
+    const run = () => resolveResume('payments', { privateDir: dir, env: {} });
+    expect(run).toThrow(/manifest/);
+    expect(run).not.toThrow(/secret-text/);
   });
 
   test('the stub says what it is and holds no digit', () => {

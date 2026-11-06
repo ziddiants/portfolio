@@ -12,10 +12,11 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { holdsWord } from '../../scripts/pdf/pipeline.mjs';
 import { prepareResumes } from '../../scripts/pdf/resume.mjs';
 import vf01 from '../../scripts/verify/rules/vf-01.mjs';
 import vf04 from '../../scripts/verify/rules/vf-04.mjs';
-import { pdfInfo, pdfRaw } from '../../scripts/verify/lib/pdf.mjs';
+import { pdfInfo, pdfRaw, pdfText } from '../../scripts/verify/lib/pdf.mjs';
 import { golden } from '../verify/golden.mjs';
 import { fakePhone, makePdf, tempDir, writeFiles } from '../verify/helpers.mjs';
 
@@ -77,9 +78,28 @@ describe('resume:prepare', () => {
     const dir = setup();
     run(dir);
     const out = join(dir, 'resumes');
-    const info = pdfInfo({ root: out, distDir: out }, 'payments.pdf');
+    const ctx = { root: out, distDir: out };
+    const info = pdfInfo(ctx, 'payments.pdf');
     expect(info.Title).toBe('Aditya Gupta');
     expect(info.Author).toBe('Aditya Gupta');
+    expect(pdfText(ctx, 'payments.pdf').replace(/\D/g, '')).toContain(own);
+  });
+
+  test('a manifest lists the sha256 of both written files (the build ships only these)', () => {
+    const dir = setup();
+    const r = run(dir);
+    const manifest = JSON.parse(readFileSync(join(dir, 'resumes', 'manifest.json'), 'utf8'));
+    expect(manifest).toEqual({
+      payments: sha(join(dir, 'resumes', 'payments.pdf')),
+      consumer: sha(join(dir, 'resumes', 'consumer.pdf')),
+    });
+    expect(r.files.map((f) => f.sha256).sort()).toEqual(Object.values(manifest).sort());
+  });
+
+  test('nothing is written, and no manifest, when a step fails', () => {
+    const dir = setup({ files: { 'resumes/raw/consumer.pdf': null } });
+    run(dir);
+    expect(existsSync(join(dir, 'resumes', 'manifest.json'))).toBe(false);
   });
 
   test('the written file passes VF-01 and VF-04 under the name it ships with', () => {
@@ -116,6 +136,15 @@ describe('resume:prepare', () => {
     expect(run(dir).findings).toEqual([]);
     const out = join(dir, 'resumes');
     expect(pdfInfo({ root: out, distDir: out }, 'payments.pdf').Creator).toBeUndefined();
+  });
+
+  test('holdsWord: a standard PDF name is structure; a word in a path or a link is a value', () => {
+    expect(holdsWord('<< /type /catalog /pages 4 0 r >>', ['pages'])).toBe(false);
+    expect(holdsWord('/creator (pages)', ['pages'])).toBe(true);
+    expect(holdsWord('/title (/users/zorvath/desktop/notes)', ['zorvath'])).toBe(true);
+    expect(holdsWord('/uri (https://x.dev/zorvath)', ['zorvath'])).toBe(true);
+    expect(holdsWord('/type /pages', ['pages', 'zz'])).toBe(false);
+    expect(holdsWord('/type /pages zz', ['pages', 'zz'])).toBe(true); // another form still counts
   });
 
   test('two runs from the same inputs give the same bytes', () => {
@@ -237,7 +266,17 @@ describe('resume:prepare — what stops it, and writes nothing', () => {
     expect(ids(run(setup({ files: { ...f, ...allowed } })))).toEqual([
       '4/email resumes/raw/payments.pdf p1',
     ]);
-    expect(() => run(setup({ files: { 'resumes/allow.json': '{ not json' } }))).toThrow();
+    const secret = 'jordan.secret@mailhost.dev';
+    const bad = setup({ files: { 'resumes/allow.json': `{ "emails": ["${secret}" ` } });
+    expect(() => run(bad)).toThrow(/is not valid JSON/);
+    expect(() => run(bad)).not.toThrow(new RegExp(secret.split('@')[0]));
+  });
+
+  test('another number right before his in the résumé text fails (review finding 1)', () => {
+    const joined = `${other.slice(0, 5)} ${other.slice(5)}\n${own.slice(0, 5)} ${own.slice(5)}`;
+    const f = { 'resumes/raw/payments.pdf': makePdf({ text: BODY('payments', joined) }) };
+    const r = stops(setup({ files: f }), ['4/phone resumes/raw/payments.pdf p1']);
+    expect(JSON.stringify(r.findings)).not.toContain(other);
   });
 
   test('a name from names.txt (step 4)', () => {

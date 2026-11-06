@@ -1,14 +1,44 @@
 // Where a version's résumé comes from (D89, D90). The real file lives in the private vault, never
-// in git: private/resumes/<id>.pdf, made by `npm run resume:prepare`. One function finds it, so
+// in git: private/resumes/<id>.pdf, made by `npm run resume:prepare` and listed, by checksum, in
+// private/resumes/manifest.json. One function finds it, so
 // load.mjs, assemble-public.mjs and verify never build that path themselves.
 //
 // CI has no private folder. There (CI=true and no real file) the build gets a stub résumé: a
 // valid PDF with no phone number and no figures. A local build never gets a stub.
-import { lstatSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { lstatSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { privateDir as defaultPrivateDir } from '../scripts/verify/lib/private.mjs';
 
 export const STUB_MARKER = 'CI stub, not a resume';
+
+const sha256 = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
+const manifestPath = (privateDir) => join(privateDir, 'resumes', 'manifest.json');
+
+/**
+ * private/resumes/manifest.json: the sha256 of each clean résumé that `resume:prepare` wrote. The
+ * build ships a résumé only if it is byte for byte that file, so a file copied in by hand, or
+ * edited after the scan, never ships unscanned (ENG-09 review, finding 2).
+ */
+export function writeManifest(privateDir, ids) {
+  const manifest = Object.fromEntries(ids.map((id) => [id, sha256(resumePath(id, privateDir))]));
+  writeFileSync(manifestPath(privateDir), `${JSON.stringify(manifest, null, 2)}\n`);
+}
+
+function checkManifest(id, path, privateDir) {
+  let want;
+  try {
+    want = JSON.parse(readFileSync(manifestPath(privateDir), 'utf8'))[id];
+  } catch {
+    want = undefined; // missing or broken: the same stop, and the file text is never shown
+  }
+  if (want !== sha256(path)) {
+    throw new Error(
+      `the résumé for "${id}" at ${path} is not the file resume:prepare wrote ` +
+        '(manifest.json is missing, or its sha256 differs). Run: npm run resume:prepare',
+    );
+  }
+}
 
 /** The path of a version's clean résumé in the private folder. */
 export const resumePath = (id, privateDir = defaultPrivateDir()) =>
@@ -23,6 +53,7 @@ export function resolveResume(id, { privateDir = defaultPrivateDir(), env = proc
   const entry = lstatSync(path, { throwIfNoEntry: false });
   if (entry) {
     if (!entry.isFile()) throw new Error(`${path} must be a real file, not a link or a folder`);
+    checkManifest(id, path, privateDir);
     return { kind: 'real', path };
   }
   if (env.CI === 'true') return { kind: 'stub' };

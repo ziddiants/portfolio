@@ -38,6 +38,36 @@ describe('VF-01 résumé exception (D88)', () => {
     expect(found[0].message).toContain(other.slice(-2));
   });
 
+  test.each([
+    ['a space', ' '],
+    ['a new line', '\n'],
+    ['a dash', '-'],
+    ['a dot', '.'],
+  ])('another number right before his, joined by %s, fails (review finding 1)', (_, glue) => {
+    const run = `${other.slice(0, 5)} ${other.slice(5)}${glue}${own.slice(0, 5)} ${own.slice(5)}`;
+    const found = vf01.run(
+      withResume(resumePdf({ text: `Aditya Gupta, product manager\n${run}` })),
+    );
+    expect(ids(found)).toEqual(['phone Aditya-Gupta-Resume.pdf']);
+    expect(JSON.stringify(found)).not.toContain(other);
+  });
+
+  test('another number right after his fails too', () => {
+    const run = `${own} ${other}`;
+    const found = vf01.run(
+      withResume(resumePdf({ text: `Aditya Gupta, product manager\n${run}` })),
+    );
+    expect(ids(found)).toEqual(['phone Aditya-Gupta-Resume.pdf']);
+  });
+
+  test.each(['0', '91', '091', '0091', '+91 '])(
+    'his number with the prefix "%s" passes',
+    (prefix) => {
+      const ctx = withResume(resumePdf({ text: text(`${prefix}${own}`) }));
+      expect(vf01.run(ctx)).toEqual([]);
+    },
+  );
+
   test('his own number in the résumé metadata fails (the exception is page text only)', () => {
     const pdf = resumePdf({ info: { Title: `Aditya Gupta ${own}`, Author: 'Aditya Gupta' } });
     expect(ids(vf01.run(withResume(pdf)))).toEqual(['phone Aditya-Gupta-Resume.pdf']);
