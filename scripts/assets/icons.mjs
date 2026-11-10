@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { BRAND, SITE_NAME } from './brand.mjs';
 import { markSvg } from './mark.mjs';
+import { isMain } from './is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -89,7 +90,7 @@ export async function buildIcons() {
   };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const out = join(ROOT, 'public');
   mkdirSync(out, { recursive: true });
   const files = await buildIcons();

@@ -47,6 +47,11 @@ try {
       join(ROOT, 'scripts', 'verify', 'index.mjs'),
       `dist/${id}`,
     ]);
+    // TC-G04 (N4): no font requests, every <img> sized. A failure stops the build like verify does.
+    run('scan fonts and images', id, process.execPath, [
+      join(ROOT, 'scripts', 'assets', 'scan-built.mjs'),
+      `dist/${id}`,
+    ]);
   }
   const ruleCount = readdirSync(join(ROOT, 'scripts', 'verify', 'rules')).filter((f) =>
     f.endsWith('.mjs'),

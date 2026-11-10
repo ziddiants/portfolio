@@ -7,7 +7,17 @@ import { describe, expect, test } from 'vitest';
 import { buildIco, buildIcons, ICO_SIZES } from '../../scripts/assets/icons.mjs';
 import { phonesIn } from '../../scripts/verify/rules/vf-01.mjs';
 import { markSvg } from '../../scripts/assets/mark.mjs';
-import { dirtyPng, metadataChunks, read, repoPath } from './helpers.mjs';
+import { dirtyPng, icoPayloads, pngProblems, read, repoPath, withChunk } from './helpers.mjs';
+
+/** Mean absolute difference per channel of two images, or Infinity if the sizes differ. */
+async function pixelDiff(a, b) {
+  const raw = (x) => sharp(x).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const [A, B] = await Promise.all([raw(a), raw(b)]);
+  if (A.info.width !== B.info.width || A.info.height !== B.info.height) return Infinity;
+  let sum = 0;
+  for (let i = 0; i < A.data.length; i++) sum += Math.abs(A.data[i] - B.data[i]);
+  return sum / A.data.length;
+}
 
 const PNGS = {
   'apple-touch-icon.png': 180,
@@ -83,18 +93,27 @@ describe('icon files in public/ (TC-E11)', () => {
     expect(total).toBeLessThanOrEqual(30 * 1024);
   });
 
-  test('no icon PNG carries metadata', () => {
-    for (const f of Object.keys(PNGS)) expect(metadataChunks(read(`public/${f}`)), f).toEqual([]);
+  test('no icon PNG, and no image inside the ICO, carries anything but picture chunks', () => {
+    for (const f of Object.keys(PNGS)) expect(pngProblems(read(`public/${f}`)), f).toEqual([]);
+    const payloads = icoPayloads(read('public/favicon.ico'));
+    expect(payloads).toHaveLength(ICO_SIZES.length);
+    payloads.forEach((p, k) => expect(pngProblems(p), `favicon.ico entry ${k}`).toEqual([]));
   });
 
-  test('the committed files equal a fresh build (nothing hand-edited, nothing stale)', async () => {
+  test('the committed icons match a fresh build: same text, same pixels (nothing hand-edited, nothing stale)', async () => {
     const fresh = await buildIcons();
     for (const f of ['favicon.svg', 'site.webmanifest']) {
       expect(read(`public/${f}`).toString(), f).toBe(fresh[f]);
     }
-    for (const [f, size] of Object.entries(PNGS)) {
-      const meta = await sharp(fresh[f]).metadata();
-      expect(meta.width, f).toBe(size);
+    // PNG bytes can differ between machines (zlib, libvips), so compare the decoded pixels
+    for (const f of Object.keys(PNGS)) {
+      expect(await pixelDiff(read(`public/${f}`), fresh[f]), f).toBeLessThanOrEqual(1);
+    }
+    const kept = icoPayloads(read('public/favicon.ico'));
+    const made = icoPayloads(fresh['favicon.ico']);
+    expect(kept).toHaveLength(made.length);
+    for (let k = 0; k < kept.length; k++) {
+      expect(await pixelDiff(kept[k], made[k]), `favicon.ico entry ${k}`).toBeLessThanOrEqual(1);
     }
   });
 });
@@ -113,21 +132,65 @@ describe('VF-01 on the text files this ticket ships', () => {
 });
 
 describe('guards: each check fails on a bad input', () => {
-  test('the metadata check rejects a PNG with EXIF', async () => {
-    expect(metadataChunks(await dirtyPng()).length).toBeGreaterThan(0);
+  const clean = () =>
+    sharp({ create: { width: 8, height: 8, channels: 3, background: '#fff' } })
+      .png({ palette: true })
+      .toBuffer();
+
+  test('a clean PNG passes the picture-chunk check (the check is not always red)', async () => {
+    expect(pngProblems(await clean())).toEqual([]);
   });
 
-  test('the ICO reader sees a two-entry file as two entries, not three', async () => {
-    const png = (size) =>
-      sharp({ create: { width: size, height: size, channels: 3, background: '#fff' } })
-        .png()
-        .toBuffer();
+  test('EXIF is rejected', async () => {
+    expect(pngProblems(await dirtyPng()).join()).toMatch(/eXIf/);
+  });
+
+  test('a chunk nobody listed (a provenance record, caBX) is rejected', async () => {
+    expect(pngProblems(withChunk(await clean(), 'caBX', Buffer.from('c2pa'))).join()).toMatch(
+      /caBX/,
+    );
+  });
+
+  test('a text chunk is rejected', async () => {
+    expect(
+      pngProblems(withChunk(await clean(), 'tEXt', Buffer.from('Author\0Some Name'))).join(),
+    ).toMatch(/tEXt/);
+  });
+
+  test('bytes after IEND are rejected', async () => {
+    const bad = Buffer.concat([await clean(), Buffer.from('hidden')]);
+    expect(pngProblems(bad).join()).toMatch(/after the last chunk/);
+  });
+
+  test('a file that is cut short is rejected, not passed', async () => {
+    const png = await clean();
+    const problems = pngProblems(png.subarray(0, png.length - 5)).join();
+    expect(problems).toMatch(/does not end with IEND/);
+  });
+
+  test('a chunk whose length runs past the end of the file is an error, not a pass', async () => {
+    const png = await clean();
+    const bad = Buffer.from(png);
+    bad.writeUInt32BE(0x7fffffff, 8); // the length of the first chunk, IHDR
+    expect(() => pngProblems(bad)).toThrow(/runs past the end/);
+  });
+
+  test('a file that is not a PNG is an error, not a pass', () => {
+    expect(() => pngProblems(Buffer.from('not a png at all'))).toThrow(/not a PNG/);
+  });
+
+  test('the ICO reader sees a two-entry file as two entries', async () => {
     const ico = buildIco([
-      { size: 16, data: await png(16) },
-      { size: 32, data: await png(32) },
+      { size: 16, data: await clean() },
+      { size: 32, data: await clean() },
     ]);
-    const entries = await readIco(ico);
-    expect(entries.map((e) => e.width)).toEqual([16, 32]);
-    expect(entries.map((e) => e.width)).not.toEqual(ICO_SIZES);
+    expect(icoPayloads(ico)).toHaveLength(2);
+  });
+
+  test('the pixel comparison tells a changed icon from an unchanged one', async () => {
+    const a = read('public/icon-192.png');
+    expect(await pixelDiff(a, a)).toBe(0);
+    const other = await sharp(a).negate({ alpha: false }).png().toBuffer();
+    expect(await pixelDiff(a, other)).toBeGreaterThan(1);
   });
 });

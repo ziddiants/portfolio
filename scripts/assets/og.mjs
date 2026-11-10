@@ -4,7 +4,8 @@
 // the output is not byte-identical on another machine (system font).
 // All text is read from files: the name and subline from the version's version.json, the hero line
 // from src/content/home/hero.yaml. Nothing is retyped here, and no other version's file is read.
-import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -12,8 +13,12 @@ import { parse } from 'yaml';
 import { listVersions, loadVersion } from '../../versions/load.mjs';
 import { BRAND, FONT_SANS } from './brand.mjs';
 import { markSvg } from './mark.mjs';
+import { isMain } from './is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
+// sha256 of the page each committed og.png was rendered from (see ogInputHash). CI has no Chromium and
+// cannot read the pixels, so a test compares this file with the current texts and template instead.
+export const INPUTS_FILE = join(ROOT, 'scripts/assets/og-inputs.json');
 
 export const OG_WIDTH = 1200;
 export const OG_HEIGHT = 630;
@@ -57,34 +62,77 @@ export function ogHtml({ name, heroLine, subline }) {
 </body></html>`;
 }
 
-/** Renders one PNG buffer per id with one shared browser. */
-export async function renderOgBuffers(ids) {
+/**
+ * sha256 of the exact HTML a version's preview is rendered from: its texts and the template.
+ * If a subline, the hero line, the name or the template changes and the PNG is not re-rendered,
+ * this no longer matches the value saved by `npm run assets:og`, and a test fails.
+ */
+export function ogInputHash(id) {
+  return createHash('sha256')
+    .update(ogHtml(ogTexts(id)))
+    .digest('hex');
+}
+
+async function launch() {
   const { chromium } = await import('playwright-core');
-  let browser;
   try {
-    browser = await chromium.launch();
+    return await chromium.launch();
   } catch (err) {
     throw new Error(
-      `og: Chromium did not start (${err.message.split('\n')[0]}). playwright-core 1.63.0 needs the Chromium build 1243 in ~/Library/Caches/ms-playwright (D96).`,
+      `og: Chromium did not start (${err.message.split('\n')[0]}). playwright-core 1.63.0 needs Chromium build 1243 (D96); set PLAYWRIGHT_BROWSERS_PATH if it is not in the default cache.`,
     );
   }
+}
+
+/** Renders one page. Text that does not fit the image is an error: it would be cut off in silence. */
+async function shoot(browser, texts, label) {
+  const page = await browser.newPage({ viewport: { width: OG_WIDTH, height: OG_HEIGHT } });
+  try {
+    await page.setContent(ogHtml(texts));
+    const fit = await page.evaluate(() => {
+      const body = document.body;
+      const hero = document.querySelector('.hero');
+      const lineHeight = parseFloat(getComputedStyle(hero).lineHeight);
+      return {
+        fits: body.scrollWidth <= body.clientWidth && body.scrollHeight <= body.clientHeight,
+        heroLines: Math.round(hero.getBoundingClientRect().height / lineHeight),
+      };
+    });
+    if (!fit.fits)
+      throw new Error(`og: the text does not fit the ${OG_WIDTH} × ${OG_HEIGHT} image (${label})`);
+    if (fit.heroLines > 3)
+      throw new Error(`og: the hero line needs ${fit.heroLines} lines; DS-OG allows 3 (${label})`);
+    const shot = await page.screenshot({ type: 'png' });
+    // palette PNG: flat colours and text keep it far below 150 KB; sharp drops all metadata
+    return await sharp(shot).png({ palette: true, effort: 10 }).toBuffer();
+  } finally {
+    await page.close();
+  }
+}
+
+/** Renders a preview from given texts (used by the tests to try text that is too long). */
+export async function renderOgFromTexts(texts) {
+  const browser = await launch();
+  try {
+    return await shoot(browser, texts, 'given texts');
+  } finally {
+    await browser.close();
+  }
+}
+
+/** Renders one PNG buffer per id with one shared browser. */
+export async function renderOgBuffers(ids) {
+  const browser = await launch();
   try {
     const out = {};
-    for (const id of ids) {
-      const page = await browser.newPage({ viewport: { width: OG_WIDTH, height: OG_HEIGHT } });
-      await page.setContent(ogHtml(ogTexts(id)));
-      const shot = await page.screenshot({ type: 'png' });
-      await page.close();
-      // palette PNG: flat colours and text keep it far below 150 KB; sharp drops all metadata
-      out[id] = await sharp(shot).png({ palette: true, effort: 10 }).toBuffer();
-    }
+    for (const id of ids) out[id] = await shoot(browser, ogTexts(id), `version "${id}"`);
     return out;
   } finally {
     await browser.close();
   }
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const ids = process.argv.length > 2 ? process.argv.slice(2) : listVersions();
   const buffers = await renderOgBuffers(ids);
   for (const id of ids) {
@@ -92,4 +140,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     writeFileSync(join(dir, ogImage), buffers[id]);
     console.log(`versions/${id}/${ogImage}  ${buffers[id].length} bytes`);
   }
+  // remember what each PNG was rendered from; keys sorted so the file does not churn
+  const saved = existsSync(INPUTS_FILE) ? JSON.parse(readFileSync(INPUTS_FILE, 'utf8')) : {};
+  for (const id of ids) saved[id] = ogInputHash(id);
+  const sorted = Object.fromEntries(Object.entries(saved).sort(([a], [b]) => a.localeCompare(b)));
+  writeFileSync(INPUTS_FILE, JSON.stringify(sorted, null, 2) + '\n');
+  console.log('scripts/assets/og-inputs.json updated');
 }

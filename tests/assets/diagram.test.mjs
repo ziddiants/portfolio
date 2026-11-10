@@ -28,6 +28,10 @@ function* walk(n) {
   for (const c of n.childNodes ?? []) yield* walk(c);
 }
 const parsed = (svg) => [...walk(parseFragment(svg))];
+const tspansOf = (svg) =>
+  parsed(svg)
+    .filter((e) => e.tagName === 'tspan')
+    .map((e) => e.childNodes.map((c) => c.value ?? '').join(''));
 const textOf = (svg) =>
   parsed(svg)
     .filter((e) => e.tagName === 'text')
@@ -59,8 +63,9 @@ describe.each([
     for (const k of PACK_KEY) expect(svg).toContain(k);
   });
 
-  test('draws every step of the spec as real text', () => {
-    const text = textOf(svg).join(' | ');
+  test('draws every step of the spec as real text, each as its own line', () => {
+    // exact line match: "Retry" must not be satisfied by "Retry page", nor "Routing" by itself twice
+    const lines = tspansOf(svg);
     for (const step of [
       'Customer pays',
       'Routing',
@@ -72,14 +77,19 @@ describe.each([
       'Retry page',
       'error in plain words',
       'Retry',
-      'gateway fault',
-      'user-side failure',
     ]) {
-      expect(text, step).toContain(step);
+      expect(
+        lines.filter((l) => l === step),
+        step,
+      ).toHaveLength(1);
     }
+    const labels = textOf(svg);
+    expect(labels).toContain('gateway fault');
+    expect(labels).toContain('user-side failure');
   });
 
   test('uses tokens only: no hex value, no rgb(), no fill or stroke colour', () => {
+    expect(svg).not.toMatch(/\bstyle=/); // an inline style could hold a colour the checks below do not see
     expect(svg).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(|hsl\(/i);
     expect(svg).not.toMatch(/\b(fill|stroke)="(?!none)/);
   });

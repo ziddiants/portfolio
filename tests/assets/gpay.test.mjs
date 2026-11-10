@@ -6,7 +6,10 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import { afterAll, describe, expect, test } from 'vitest';
 import { GPAY_FILES, GpayError, optimiseGpay } from '../../scripts/assets/gpay.mjs';
-import { metadataChunks, read, repoPath } from './helpers.mjs';
+import { pngProblems, read, repoPath } from './helpers.mjs';
+
+// Screen height inside the frame, less 1 px of inset at the top and at the bottom.
+const HEIGHTS = { 'gpay-processing': 1316, 'gpay-refund-pending': 1316, 'gpay-overdue': 1953 };
 
 const tmp = mkdtempSync(join(tmpdir(), 'eng11-gpay-'));
 afterAll(() => rmSync(tmp, { recursive: true, force: true }));
@@ -23,7 +26,7 @@ describe('src/assets/gpay/ (committed outputs)', () => {
     expect(buf.length).toBeLessThanOrEqual(150 * 1024);
     const meta = await sharp(buf).metadata();
     expect(meta.width).toBe(590);
-    expect(meta.height).toBeGreaterThan(1000);
+    expect(meta.height).toBe(HEIGHTS[n]); // the crop of a 1390 px source is 1316, of the joined 2027 px image 1953
   });
 
   test.each(GPAY_FILES)('%s as WebP at its own width is at most 80 KB (ERD budget)', async (n) => {
@@ -35,7 +38,7 @@ describe('src/assets/gpay/ (committed outputs)', () => {
 
   test.each(GPAY_FILES)('%s has no metadata chunk and no colour profile', async (n) => {
     const buf = read(`src/assets/gpay/${n}.png`);
-    expect(metadataChunks(buf)).toEqual([]);
+    expect(pngProblems(buf)).toEqual([]);
     const meta = await sharp(buf).metadata();
     expect(meta.icc).toBeUndefined();
     expect(meta.exif).toBeUndefined();
@@ -87,13 +90,20 @@ describe('optimiseGpay guards', () => {
   });
 
   test.skipIf(!existsSync(repoPath('.inputs/gpay/gpay-processing.png')))(
-    'on the real input, the output has the same size as the committed file',
+    'on the real inputs, a fresh run gives the same pixels as the committed files',
     async () => {
-      const fresh = await sharp(
-        await optimiseGpay(repoPath('.inputs/gpay/gpay-processing.png')),
-      ).metadata();
-      const kept = await sharp(read('src/assets/gpay/gpay-processing.png')).metadata();
-      expect([fresh.width, fresh.height]).toEqual([kept.width, kept.height]);
+      for (const n of GPAY_FILES) {
+        const fresh = await optimiseGpay(repoPath(`.inputs/gpay/${n}.png`));
+        const a = await sharp(fresh).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+        const b = await sharp(read(`src/assets/gpay/${n}.png`))
+          .ensureAlpha()
+          .raw()
+          .toBuffer({ resolveWithObject: true });
+        expect([a.info.width, a.info.height], n).toEqual([b.info.width, b.info.height]);
+        let sum = 0;
+        for (let q = 0; q < a.data.length; q++) sum += Math.abs(a.data[q] - b.data[q]);
+        expect(sum / a.data.length, `${n}: mean pixel difference`).toBeLessThanOrEqual(1);
+      }
     },
   );
 });

@@ -4,13 +4,15 @@
 // What it does to each file:
 // - crops the phone frame away (DR-I2: no fake phone frames; the page puts the screen on a panel),
 // - rounds the screen corners with a transparent mask (the screen has rounded corners; the crop is square),
-// - converts to sRGB, drops the Apple "Display" colour profile and all metadata,
+// - converts to sRGB and drops any colour profile and all metadata (two of the three sources carry
+//   Apple's "Display" profile; the joined overdue image has none),
 // - writes a palette PNG (flat UI colours compress far below the 150 KB budget).
 // Width is never raised: the sources are 662 px wide, so the output is 590 px (D95).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
+import { isMain } from './is-main.mjs';
 
 const ROOT = fileURLToPath(new URL('../..', import.meta.url));
 
@@ -47,7 +49,7 @@ export async function optimiseGpay(inputPath) {
     .toBuffer();
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const outDir = join(ROOT, 'src', 'assets', 'gpay');
   mkdirSync(outDir, { recursive: true });
   for (const name of GPAY_FILES) {

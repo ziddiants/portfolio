@@ -1,6 +1,6 @@
 // TC-G04 (automatic half): the scanner finds font requests and images without a size, passes a clean
 // build, and fails on an empty folder. The real build is scanned by `npm run build` + the CLI (PR notes).
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, test } from 'vitest';
@@ -90,5 +90,67 @@ describe('scanBuilt', () => {
 
   test('a folder that does not exist fails', () => {
     expect(() => scanBuilt(join(tmpdir(), 'eng11-does-not-exist'))).toThrow();
+  });
+});
+
+describe('scanBuilt: other ways to ask for a font (ENG-11 review, finding 8)', () => {
+  const problems = (files) => scanBuilt(site({ 'index.html': good, ...files })).problems.join('\n');
+
+  test('a Google Fonts stylesheet link fails', () => {
+    const r = scanBuilt(
+      site({
+        'index.html': page(
+          '<p>x</p>',
+          '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter">',
+        ),
+      }),
+    );
+    expect(r.problems.join('\n')).toContain('a font host');
+  });
+
+  test('an @import of a font host in a stylesheet fails', () => {
+    expect(problems({ 'a.css': '@import url(https://fonts.gstatic.com/x.css);' })).toContain(
+      'a font host',
+    );
+  });
+
+  test('a preload with several rel words and an upper-case as="FONT" fails', () => {
+    const head = '<link rel="Preload prefetch" as="FONT" href="/f">';
+    const r = scanBuilt(site({ 'index.html': page('<p>x</p>', head) }));
+    expect(r.problems.join('\n')).toContain('preload');
+  });
+
+  test('a FontFace() call in a script fails', () => {
+    expect(problems({ 'app.js': 'new FontFace("X", "url(x)").load();' })).toContain('FontFace()');
+  });
+
+  test('an @font-face inside an SVG fails', () => {
+    expect(
+      problems({ 'logo.svg': '<svg><style>@font-face{font-family:X}</style></svg>' }),
+    ).toContain('@font-face');
+  });
+
+  test('a stylesheet with an upper-case extension is still read', () => {
+    expect(problems({ 'A.CSS': '@font-face{font-family:X}' })).toContain('@font-face');
+  });
+
+  test('a symbolic link in the build folder fails, it is not followed or skipped', () => {
+    const dir = site({ 'index.html': good });
+    symlinkSync(tmpdir(), join(dir, 'link-to-elsewhere'));
+    expect(() => scanBuilt(dir)).toThrow(/symbolic link/);
+  });
+});
+
+describe('the scan runs on every real build (ENG-11 review, finding 2)', () => {
+  // Nothing else calls the scanner, so TC-G04 would only ever run on fixtures. build-all.mjs runs it
+  // after verify, for each version, and its failure stops the build; CI runs `npm run build`.
+  const src = readFileSync(new URL('../../scripts/build-all.mjs', import.meta.url), 'utf8');
+
+  test('build-all runs scan-built.mjs on dist/<id>, after the verify step', () => {
+    const verifyAt = src.indexOf("run('verify'");
+    const scanAt = src.indexOf("'scan-built.mjs'");
+    expect(verifyAt).toBeGreaterThan(-1);
+    expect(scanAt).toBeGreaterThan(verifyAt);
+    expect(src.slice(scanAt, scanAt + 120)).toContain('dist/${id}');
   });
 });

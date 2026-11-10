@@ -6,16 +6,22 @@
 // Usage: node scripts/assets/scan-built.mjs <built folder>...   Exit 1 if any problem is found.
 import { readFileSync, readdirSync } from 'node:fs';
 import { extname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { parse } from 'parse5';
+import { isMain } from './is-main.mjs';
 
 const FONT_EXT = new Set(['.woff', '.woff2', '.ttf', '.otf', '.eot']);
+// A font loaded from another site is still a font request (N4: no font downloads).
+const FONT_HOST =
+  /fonts\.(?:googleapis|gstatic)\.com|use\.typekit\.net|fonts\.bunny\.net|(?:use|kit)\.fontawesome\.com/i;
+const TEXT_EXT = new Set(['.css', '.html', '.js', '.mjs', '.svg']);
 const FONT_URL = /url\(\s*["']?[^)"']*\.(?:woff2?|ttf|otf|eot)(?:[?#][^)"']*)?["']?\s*\)/i;
 
 function walkFiles(dir) {
   const out = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, entry.name);
+    // a link could point anywhere: a build folder holds none, so one is an error, not a file
+    if (entry.isSymbolicLink()) throw new Error(`scan-built: ${p} is a symbolic link`);
     if (entry.isDirectory()) out.push(...walkFiles(p));
     else out.push(p);
   }
@@ -29,6 +35,7 @@ function* elements(node) {
 }
 
 const attr = (el, name) => el.attrs.find((a) => a.name === name)?.value;
+const tokens = (v) => (v ?? '').toLowerCase().split(/\s+/).filter(Boolean);
 const positiveInt = (v) => v !== undefined && /^[1-9][0-9]*$/.test(v.trim());
 
 /**
@@ -46,14 +53,20 @@ export function scanBuilt(dir) {
   for (const f of files) {
     if (FONT_EXT.has(extname(f).toLowerCase())) problems.push(`${rel(f)}: font file shipped`);
   }
-  for (const f of files.filter((x) => ['.css', '.html'].includes(extname(x)))) {
+  for (const f of files.filter((x) => TEXT_EXT.has(extname(x).toLowerCase()))) {
     const text = readFileSync(f, 'utf8');
     if (/@font-face/i.test(text)) problems.push(`${rel(f)}: @font-face`);
+    if (/new\s+FontFace\s*\(/.test(text)) problems.push(`${rel(f)}: FontFace() in a script`);
     if (FONT_URL.test(text)) problems.push(`${rel(f)}: url() of a font file`);
+    if (FONT_HOST.test(text)) problems.push(`${rel(f)}: a font host (another site's fonts)`);
   }
   for (const f of htmlFiles) {
     for (const el of elements(parse(readFileSync(f, 'utf8')))) {
-      if (el.tagName === 'link' && attr(el, 'rel') === 'preload' && attr(el, 'as') === 'font') {
+      if (
+        el.tagName === 'link' &&
+        tokens(attr(el, 'rel')).includes('preload') &&
+        tokens(attr(el, 'as')).includes('font')
+      ) {
         problems.push(`${rel(f)}: <link rel="preload" as="font">`);
       }
       if (el.tagName === 'img') {
@@ -67,7 +80,7 @@ export function scanBuilt(dir) {
   return { htmlFiles: htmlFiles.length, imageCount, problems };
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (isMain(import.meta.url)) {
   const dirs = process.argv.slice(2);
   if (dirs.length === 0) {
     console.error('usage: node scripts/assets/scan-built.mjs <built folder>...');
