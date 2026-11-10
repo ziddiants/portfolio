@@ -1,0 +1,61 @@
+---
+// Not placed on a page yet: ENG-19 puts it on the CarInfo case study.
+import { diagramSvg } from '../lib/carinfo-diagram';
+---
+
+<div class="carinfo-diagram">
+  <Fragment set:html={diagramSvg('row')} />
+  <Fragment set:html={diagramSvg('column')} />
+</div>
+
+<style is:global>
+  /* Colours are tokens only. Indigo = what Aditya added (2 px). Grey = what already existed (1 px). */
+  .carinfo-diagram svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .carinfo-diagram .cd-row {
+    display: none;
+    max-width: 844px;
+  }
+  .carinfo-diagram .cd-column {
+    max-width: 404px;
+  }
+  @media (min-width: 600px) {
+    .carinfo-diagram .cd-row {
+      display: block;
+    }
+    .carinfo-diagram .cd-column {
+      display: none;
+    }
+  }
+  .carinfo-diagram .cd-new,
+  .carinfo-diagram .cd-edge {
+    fill: none;
+    stroke: var(--color-accent);
+    stroke-width: 2;
+  }
+  .carinfo-diagram .cd-old {
+    fill: none;
+    stroke: var(--color-text-muted);
+    stroke-width: 1;
+  }
+  .carinfo-diagram .cd-head {
+    fill: var(--color-accent);
+    stroke: none;
+  }
+  .carinfo-diagram .cd-text {
+    fill: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 16px;
+  }
+  .carinfo-diagram .cd-strong {
+    font-weight: 600;
+  }
+  .carinfo-diagram .cd-label {
+    fill: var(--color-text-muted);
+    font-family: var(--font-sans);
+    font-size: 14px;
+  }
+</style>

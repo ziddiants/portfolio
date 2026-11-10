@@ -7,6 +7,7 @@ export default defineConfig({
       'tests/verify/**/*.test.mjs',
       'tests/pdf/**/*.test.mjs',
       'tests/content/**/*.test.mjs',
+      'tests/assets/**/*.test.mjs',
     ],
     testTimeout: 60_000,
   },
