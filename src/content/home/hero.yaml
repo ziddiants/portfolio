@@ -1,0 +1,9 @@
+- id: hero
+  heroLine: 'I find where a product is quietly losing money, users or trust, and fix it.'
+  domainChips:
+    - Payments infrastructure
+    - Monetization & subscriptions
+    - 0-to-1 product
+    - Payment routing & reconciliation
+    - Growth
+  sources: [S-001, S-002]

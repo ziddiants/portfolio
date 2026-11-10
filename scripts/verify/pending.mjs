@@ -4,7 +4,6 @@
 // Production release and /ship-check refuse while it is not empty (ENG-30).
 // Every entry needs Aditya's approval (D80); remove entries, never add them to pass a build.
 export const PENDING = {
-  'VF-05/content-present': 'ENG-10', // the content pack is not in src/content/ yet
   'VF-11/description': 'ENG-22',
   'VF-11/canonical': 'ENG-22',
   'VF-11/open-graph': 'ENG-22',

@@ -12,14 +12,15 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
+import { writeFakeRegister } from '../fake-register.mjs';
 import { writeFakeResumes } from '../fake-resumes.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const FILES = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
@@ -64,7 +65,7 @@ function makeCopy(branch) {
     mkdirSync(join(dir, file, '..'), { recursive: true });
     cpSync(join(REPO, file), join(dir, file));
   }
-  symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  linkNodeModules(dir);
   git(dir, 'init', '-q', '-b', branch);
   // A symlink is not matched by the "node_modules/" rule, so exclude it by hand.
   writeFileSync(
@@ -83,10 +84,7 @@ function makeCopy(branch) {
 // VF-02 and VF-05 need private files; a fake folder with made-up entries stands in (ENG-07).
 const PRIVATE = mkdtempSync(join(tmpdir(), 'release-private-'));
 writeFileSync(join(PRIVATE, 'names.txt'), '# made up\nZorvath Quell\n');
-writeFileSync(
-  join(PRIVATE, 'content-sources.md'),
-  '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
-);
+writeFakeRegister(PRIVATE); // lists the source IDs src/content/ cites (ENG-10)
 writeFakeResumes(PRIVATE); // a fake clean résumé per version (D89)
 after(() => rmSync(PRIVATE, { recursive: true, force: true }));
 
