@@ -56,7 +56,9 @@ function sync(dir) {
     env: { ...process.env, SITE_VERSION: 'payments' },
     encoding: 'utf8',
   });
-  return { status: r.status, out: r.stdout + r.stderr };
+  // CI prints colour codes around field names; match the plain text.
+  const out = (r.stdout + r.stderr).replace(/\u001b\[[0-9;]*m/g, '');
+  return { status: r.status, out };
 }
 
 const edit = (dir, path, fn) => {
