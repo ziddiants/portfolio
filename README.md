@@ -4,7 +4,7 @@ Source code for Aditya Gupta's product portfolio: two static sites built from
 one codebase and deployed to Cloudflare Pages. No server, no database, no
 tracking beyond privacy-friendly page-view analytics.
 
-- **Payments** — product work in consumer payments and monetization.
+- **Payments** — product work in payments and monetization.
 - **Consumer Apps** — product work in consumer apps and monetization.
 
 Both sites share every page and section. Only the résumé and a small settings
