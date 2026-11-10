@@ -22,6 +22,7 @@ import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { stubResumePdf, writeManifest } from '../../versions/resume.mjs';
+import { writeFakeRegister } from '../fake-register.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 // Only the regular files git sees (tracked, or new and not ignored): never CLAUDE.md, .env,
@@ -69,10 +70,7 @@ for (const id of ['payments', 'consumer']) {
   writeFileSync(join(PRIVATE, 'resumes', `${id}.pdf`), stubResumePdf(['Payment success 46%.']));
 }
 writeManifest(PRIVATE, ['payments', 'consumer']);
-writeFileSync(
-  join(PRIVATE, 'content-sources.md'),
-  '| ID | Source |\n| --- | --- |\n| S-001 | test |\n',
-);
+writeFakeRegister(PRIVATE);
 
 function run(dir, args, env = {}) {
   const fullEnv = { ...process.env, PORTFOLIO_PRIVATE_DIR: PRIVATE, VERIFY_MODE: '', ...env };
@@ -138,7 +136,7 @@ describe('a full build', () => {
     for (const id of ['payments', 'consumer']) {
       assert.ok(existsSync(join(dir, 'dist', id, 'index.html')), `dist/${id}/index.html`);
       // All 16 rules ran on this version; every check passed or is pending (D70, D80).
-      const pending = id === 'payments' ? 9 : 12;
+      const pending = id === 'payments' ? 8 : 11;
       assert.match(
         result.out,
         new RegExp(`verify: 16 rules passed, ${pending} checks pending on dist/${id}\\b`),

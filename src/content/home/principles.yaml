@@ -1,0 +1,25 @@
+- id: value-leaks
+  order: 1
+  title: 'Find where value quietly leaks: money, users or trust.'
+  proof: 'CarInfo: payment success had fallen to 45%, and every failed payment cost us a sale and some trust.'
+  sources: [S-003, S-012]
+- id: ask-why
+  order: 2
+  title: 'Ask why before deciding what to build.'
+  proof: "CarInfo: the problem looked like too few gateways. Routing only saves the gateway's failures, so I also built for the ones that break trust."
+  sources: [S-012]
+- id: act-on-what-we-see
+  order: 3
+  title: 'Act on what only we can see.'
+  proof: "Impact Guru: the gateway retried lapsed donations blind for up to 72 hours. I timed retries and nudges to the donor's own moments, with rules for when not to chase."
+  sources: [S-012]
+- id: expert-who-reaches-everyone
+  order: 4
+  title: 'Solve for the expert who reaches everyone.'
+  proof: "Vinyasa Health: I moved the product from patients to therapists, and used AI to read the session where a form couldn't."
+  sources: [S-004, S-012]
+- id: earn-its-place
+  order: 5
+  title: 'Make it earn its place.'
+  proof: 'CarInfo: at 1M+ daily users, the in-app store drew 30–50 small orders a day while stock, delivery and support cost us daily. I paused it until it could prove it would last.'
+  sources: [S-005]

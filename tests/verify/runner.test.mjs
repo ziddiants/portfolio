@@ -17,7 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'vitest';
 import { formatFinding, formatPending, runRules } from '../../scripts/verify/runner.mjs';
 import { ctxFor, fakePrivate, git } from './helpers.mjs';
-import { privateFiles } from './golden.mjs';
+import { privateFiles, ROOT } from './golden.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const pass = { id: 'T-1', checks: ['a'], run: () => [] };
@@ -209,6 +209,7 @@ function cliRepo() {
   const dir = mkdtempSync(join(tmpdir(), 'verify-cli-'));
   for (const d of ['scripts', 'versions']) cpSync(join(REPO, d), join(dir, d), { recursive: true });
   cpSync(join(REPO, 'package.json'), join(dir, 'package.json'));
+  cpSync(join(ROOT, 'src'), join(dir, 'src'), { recursive: true }); // content for VF-05 (ENG-10)
   symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
   for (const id of ['payments', 'consumer']) {
     const out = join(dir, 'dist', id);
@@ -249,11 +250,11 @@ describe('the verify command', () => {
     try {
       const r = cli(dir, 'dist/payments');
       expect(r.status, r.out).toBe(0);
-      expect(r.out).toMatch(/verify: 16 rules passed, 9 checks pending on dist\/payments/);
+      expect(r.out).toMatch(/verify: 16 rules passed, 8 checks pending on dist\/payments/);
       expect(r.out).toMatch(/… VF-14\/disclaimer pending \(ENG-20\)/);
       const c = cli(dir, 'dist/consumer');
       expect(c.status, c.out).toBe(0);
-      expect(c.out).toMatch(/verify: 16 rules passed, 12 checks pending on dist\/consumer/);
+      expect(c.out).toMatch(/verify: 16 rules passed, 11 checks pending on dist\/consumer/);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -1,0 +1,21 @@
+- id: payments-infra
+  group: Payments & Infra
+  tools:
+    [Razorpay, Juspay, PayU, Cashfree, Stripe, Checkout.com, PayPal, UPI/netbanking, reconciliation]
+  sources: [S-002]
+- id: analytics-data
+  group: Analytics & Data
+  tools: [Google Analytics, Mixpanel, Tableau, OpenSearch, SQL]
+  sources: [S-002]
+- id: engagement-crm
+  group: Engagement & CRM
+  tools: [Gupshup, QuickReply, MoEngage]
+  sources: [S-002]
+- id: product-design
+  group: Product & Design
+  tools: [Jira, Figma, Confluence, Notion]
+  sources: [S-002]
+- id: build-ai
+  group: Build & AI
+  tools: [GitHub, Claude Code, Cursor, OpenCode, Supabase, Vercel]
+  sources: [S-002]
