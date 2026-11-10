@@ -5,12 +5,10 @@ import { spawnSync } from 'node:child_process';
 import {
   cpSync,
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,6 +19,7 @@ import { parse as parseYaml } from 'yaml';
 import vf05 from '../../scripts/verify/rules/vf-05.mjs';
 import { privateDir, privateState } from '../../scripts/verify/lib/private.mjs';
 import { citedSourceIds, writeFakeRegister } from '../fake-register.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 import { ctxFor, git } from '../verify/helpers.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
@@ -42,13 +41,7 @@ function repoCopy() {
   ]) {
     cpSync(join(REPO, p), join(dir, p), { recursive: true });
   }
-  // Link each package, not the folder: Astro keeps its data store in node_modules/.astro, and the
-  // test must not write into the real one.
-  mkdirSync(join(dir, 'node_modules'));
-  for (const e of readdirSync(join(REPO, 'node_modules'))) {
-    if (e === '.astro' || e === '.vite') continue;
-    symlinkSync(join(REPO, 'node_modules', e), join(dir, 'node_modules', e));
-  }
+  linkNodeModules(dir);
   git(dir, 'init', '-q');
   git(dir, 'config', 'user.email', 'test@example.invalid');
   git(dir, 'config', 'user.name', 'test');
@@ -94,28 +87,44 @@ describe('TC-A10 one sentence changes one file', () => {
 });
 
 describe('schemas reject bad content at sync time', () => {
+  // [file, edit, text Astro prints for that field]: a failure for another reason does not count.
   const guards = {
     'a card problem over 160 characters': [
       CARINFO,
       (t) => t.replace(/^cardProblem: .*$/m, `cardProblem: '${'x'.repeat(161)}'`),
+      /cardProblem: Too big/,
     ],
     'a figure with empty alt text': [
       CARINFO,
       (t) => t.replace(/^sources:/m, 'figures:\n  - { src: a.png, alt: "", caption: c }\nsources:'),
+      /figures\.0\.alt: Too small/,
     ],
-    'a malformed source ID': [CARINFO, (t) => t.replace('[S-003, S-010, S-011]', '[S-1234]')],
-    'an entry without sources': [CARINFO, (t) => t.replace(/^sources: .*\n/m, '')],
+    'a malformed source ID': [
+      CARINFO,
+      (t) => t.replace('[S-003, S-010, S-011]', '[S-1234]'),
+      /sources\.0: Invalid string/,
+    ],
+    'an entry without sources': [
+      CARINFO,
+      (t) => t.replace(/^sources: .*\n/m, ''),
+      /sources.*Required/,
+    ],
     'a project tag other than "1-week sprint"': [
       'src/content/projects/vendrax.md',
       (t) => t.replace("tag: '1-week sprint'", 'tag: sprint'),
+      /tag: Invalid input/,
     ],
   };
-  for (const [name, [path, change]] of Object.entries(guards)) {
+  for (const [name, [path, change, message]] of Object.entries(guards)) {
     test(`fails on ${name}`, () => {
       const dir = repoCopy();
+      const before = readFileSync(join(dir, path), 'utf8');
       edit(dir, path, change);
+      // An edit that matched nothing plants no fault; the test would then fail for no reason.
+      expect(readFileSync(join(dir, path), 'utf8')).not.toBe(before);
       const r = sync(dir);
       expect(r.status, r.out).not.toBe(0);
+      expect(r.out).toMatch(message);
     });
   }
 });
@@ -128,6 +137,27 @@ describe('TC-B05 on the real content', () => {
     expect(vf05.run(ctxFor(REPO, { privateDir: priv }))).toEqual([]);
   });
 
+  test('VF-05 reports an ID that is missing from the register (the fake is not circular)', () => {
+    const priv = mkdtempSync(join(tmpdir(), 'eng10-priv-'));
+    copies.push(priv);
+    writeFakeRegister(priv);
+    const [missing] = citedSourceIds();
+    const register = join(priv, 'content-sources.md');
+    writeFileSync(
+      register,
+      readFileSync(register, 'utf8')
+        .split('\n')
+        .filter((l) => !l.startsWith(`| ${missing} |`))
+        .join('\n'),
+    );
+    const found = vf05.run(ctxFor(REPO, { privateDir: priv }));
+    expect(found.length).toBeGreaterThan(0);
+    expect(found.every((f) => f.check === 'sources-known')).toBe(true);
+    expect(found.some((f) => f.message.includes(missing))).toBe(true);
+  });
+
+  // CI has no private folder, so this one is skipped there (like VF-02). The local build with the
+  // private folder is the gate for real IDs.
   test('VF-05 finds nothing against the real register', (ctx) => {
     const dir = privateDir();
     if (privateState(dir, 'content-sources.md') !== 'ok') {
@@ -162,11 +192,9 @@ describe('the imported pack', () => {
 
   test('D92: the ₹20–25L bullet is nowhere', () => {
     for (const f of files()) {
-      expect(readFileSync(join(REPO, f), 'utf8'), f).not.toMatch(/20\s*[–-]\s*25\s*L/i);
+      expect(readFileSync(join(REPO, f), 'utf8'), f).not.toMatch(
+        /20\s*(?:[–—−-]|to)\s*25\s*(?:L|lakh|lac)/i,
+      );
     }
-  });
-
-  test('every cited source ID is a well-formed ID', () => {
-    expect(citedSourceIds().length).toBeGreaterThan(0);
   });
 });

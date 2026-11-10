@@ -18,6 +18,7 @@ import { describe, expect, test } from 'vitest';
 import { formatFinding, formatPending, runRules } from '../../scripts/verify/runner.mjs';
 import { ctxFor, fakePrivate, git } from './helpers.mjs';
 import { privateFiles, ROOT } from './golden.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const pass = { id: 'T-1', checks: ['a'], run: () => [] };
@@ -210,7 +211,7 @@ function cliRepo() {
   for (const d of ['scripts', 'versions']) cpSync(join(REPO, d), join(dir, d), { recursive: true });
   cpSync(join(REPO, 'package.json'), join(dir, 'package.json'));
   cpSync(join(ROOT, 'src'), join(dir, 'src'), { recursive: true }); // content for VF-05 (ENG-10)
-  symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  linkNodeModules(dir);
   for (const id of ['payments', 'consumer']) {
     const out = join(dir, 'dist', id);
     const v = JSON.parse(readFileSync(join(REPO, 'versions', id, 'version.json'), 'utf8'));

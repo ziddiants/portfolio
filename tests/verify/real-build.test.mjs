@@ -10,7 +10,6 @@ import {
   lstatSync,
   mkdtempSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -19,6 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { privateFiles } from './golden.mjs';
 import { fakePhone, fakePrivate } from './helpers.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const PHONE = `+91 ${fakePhone()}`;
@@ -61,7 +61,7 @@ let out;
 beforeAll(() => {
   dir = mkdtempSync(join(tmpdir(), 'eng07-real-build-'));
   for (const file of FILES) cpSync(join(REPO, file), join(dir, file));
-  symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  linkNodeModules(dir);
   writeFileSync(join(dir, 'src', 'pages', 'index.astro'), PAGE);
   const git = (...args) =>
     spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], {

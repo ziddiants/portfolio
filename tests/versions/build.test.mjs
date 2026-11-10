@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 import { after, before, describe, test } from 'node:test';
 import { stubResumePdf, writeManifest } from '../../versions/resume.mjs';
 import { writeFakeRegister } from '../fake-register.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 // Only the regular files git sees (tracked, or new and not ignored): never CLAUDE.md, .env,
@@ -40,7 +41,7 @@ function makeCopy() {
   const dir = mkdtempSync(join(tmpdir(), 'eng04-build-'));
   copies.push(dir);
   for (const file of FILES) cpSync(join(REPO, file), join(dir, file));
-  symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  linkNodeModules(dir);
   // The real figures are ENG-09 data: the copy's settings use the test résumé's figure instead.
   for (const id of ['payments', 'consumer']) {
     const file = join(dir, 'versions', id, 'version.json');

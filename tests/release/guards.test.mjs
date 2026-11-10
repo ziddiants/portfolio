@@ -12,7 +12,6 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 import { after, describe, test } from 'node:test';
 import { writeFakeRegister } from '../fake-register.mjs';
 import { writeFakeResumes } from '../fake-resumes.mjs';
+import { linkNodeModules } from '../link-node-modules.mjs';
 
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const FILES = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], {
@@ -65,7 +65,7 @@ function makeCopy(branch) {
     mkdirSync(join(dir, file, '..'), { recursive: true });
     cpSync(join(REPO, file), join(dir, file));
   }
-  symlinkSync(join(REPO, 'node_modules'), join(dir, 'node_modules'), 'dir');
+  linkNodeModules(dir);
   git(dir, 'init', '-q', '-b', branch);
   // A symlink is not matched by the "node_modules/" rule, so exclude it by hand.
   writeFileSync(
