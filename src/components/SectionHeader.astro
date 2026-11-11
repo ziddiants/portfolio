@@ -1,0 +1,56 @@
+---
+// DS-CMP-05. A hairline, the label ("01 Selected work"), the h2 and an optional intro.
+// The number is in the label text, not a CSS counter. The h2 text is fixed copy (D99).
+import { assertSectionNumber } from '../lib/guards';
+
+interface Props {
+  number: string;
+  name: string;
+  heading: string;
+  headingId: string;
+  intro?: string;
+}
+const { number, name, heading, headingId, intro } = Astro.props;
+assertSectionNumber(number);
+---
+
+<header class="section-header">
+  <p class="label">
+    <span class="num">{number}</span> {name}
+  </p>
+  <h2 id={headingId}>{heading}</h2>
+  {intro && <p class="intro">{intro}</p>}
+</header>
+
+<style>
+  .section-header {
+    border-top: var(--line-width) solid var(--color-line);
+    padding-top: var(--space-5);
+    margin-bottom: var(--space-5);
+  }
+  .label {
+    margin: 0 0 var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-label);
+    line-height: var(--leading-label);
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  h2 {
+    font-size: var(--text-h2);
+    line-height: var(--leading-h2);
+    letter-spacing: var(--tracking-h2);
+  }
+  .intro {
+    margin: var(--space-3) 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-lead);
+    line-height: var(--leading-lead);
+  }
+  @media (min-width: 1100px) {
+    .section-header {
+      margin-bottom: var(--space-6);
+    }
+  }
+</style>

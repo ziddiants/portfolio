@@ -1,0 +1,49 @@
+---
+// DS-CMP-17. An image or a diagram on a surface panel, with a caption that says what to notice.
+// Image: pass src and alt (Astro's Image, so it is sized, N4). Diagram: pass no src and put the
+// diagram in the slot; it carries its own accessible name. The caption is always required (N5).
+import { Image } from 'astro:assets';
+import type { ImageMetadata } from 'astro';
+import { assertFigure } from '../lib/guards';
+
+interface Props {
+  caption: string;
+  src?: ImageMetadata;
+  alt?: string;
+  widths?: number[];
+  sizes?: string;
+}
+const { caption, src, alt, widths, sizes } = Astro.props;
+assertFigure({ caption, hasImage: Boolean(src), alt, hasSlot: Astro.slots.has('default') });
+---
+
+<figure>
+  <div class="panel">
+    {src ? <Image src={src} alt={alt!} {...(widths ? { widths, sizes } : {})} /> : <slot />}
+  </div>
+  <figcaption>{caption}</figcaption>
+</figure>
+
+<style>
+  figure {
+    margin: 0;
+  }
+  .panel {
+    background: var(--color-surface);
+    border: var(--line-width) solid var(--color-line);
+    border-radius: var(--radius-sm);
+    padding: var(--space-4);
+  }
+  .panel :global(img),
+  .panel :global(svg) {
+    display: block;
+    max-width: 100%;
+    height: auto;
+  }
+  figcaption {
+    margin-top: var(--space-3);
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+  }
+</style>

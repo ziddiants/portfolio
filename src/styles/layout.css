@@ -1,0 +1,28 @@
+/* src/styles/layout.css
+   Page container and text rhythm (design-brand.md § Space). Tokens only.
+   base.css stays as the design doc has it; the rhythm rules that doc leaves to engineering live here. */
+
+p {
+  margin: 0;
+}
+p + p {
+  margin-top: var(--space-4);
+}
+
+.container {
+  /* border-box: the max-width counts the side padding, so the content column is 72rem */
+  box-sizing: border-box;
+  max-width: calc(var(--container) + 2 * var(--page-gutter));
+  margin-inline: auto;
+  padding-inline: var(--page-gutter);
+}
+
+/* Space between home sections: 64 px, 128 px from 1100 (the 768 to 1099 range keeps the phone value). */
+.home-section {
+  margin-top: var(--space-8);
+}
+@media (min-width: 1100px) {
+  .home-section {
+    margin-top: var(--space-10);
+  }
+}

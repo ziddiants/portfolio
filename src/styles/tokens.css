@@ -1,0 +1,167 @@
+/* src/styles/tokens.css
+   Source of truth: ~/my_builds/portfolio/design-brand.md
+   The only file allowed to hold raw colour values (VF-09). */
+
+:root {
+  color-scheme: light dark;
+
+  /* Colour: light (default) */
+  --color-bg: #faf8f4;
+  --color-surface: #f2efe8;
+  --color-text: #1c1b18;
+  --color-text-muted: #5c5850;
+  --color-line: #e2ddd3;
+  --color-line-strong: #8f887b;
+  --color-accent: #4f55d9;
+  --color-accent-hover: #3d43c2;
+  --color-accent-tint: #ecedfb;
+  --color-on-accent: #ffffff;
+
+  /* Type families */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+  /* Type sizes */
+  --text-display: clamp(2.25rem, 1.65rem + 2.7vw, 4rem);
+  --text-ledger: clamp(2rem, 1.7rem + 1.4vw, 3rem);
+  --text-h1: clamp(2rem, 1.7rem + 1.4vw, 3rem);
+  --text-h2: clamp(1.5rem, 1.35rem + 0.7vw, 2rem);
+  --text-h3: 1.25rem;
+  --text-lead: clamp(1.125rem, 1.08rem + 0.2vw, 1.25rem);
+  --text-body: clamp(1rem, 0.98rem + 0.1vw, 1.0625rem);
+  --text-small: 0.9375rem;
+  --text-label: 0.8125rem;
+
+  /* Line heights */
+  --leading-display: 1.06;
+  --leading-ledger: 1;
+  --leading-h1: 1.1;
+  --leading-h2: 1.2;
+  --leading-h3: 1.3;
+  --leading-lead: 1.5;
+  --leading-body: 1.6;
+  --leading-small: 1.5;
+  --leading-label: 1.4;
+
+  /* Tracking */
+  --tracking-display: -0.022em;
+  --tracking-ledger: -0.015em;
+  --tracking-h1: -0.018em;
+  --tracking-h2: -0.01em;
+  --tracking-label: 0.06em;
+
+  /* Weights (only these three) */
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Space: 4 px scale, in rem so it follows the visitor's font size */
+  --space-1: 0.25rem; /*   4 px */
+  --space-2: 0.5rem; /*   8 px */
+  --space-3: 0.75rem; /*  12 px */
+  --space-4: 1rem; /*  16 px */
+  --space-5: 1.5rem; /*  24 px */
+  --space-6: 2rem; /*  32 px */
+  --space-7: 3rem; /*  48 px */
+  --space-8: 4rem; /*  64 px */
+  --space-9: 6rem; /*  96 px */
+  --space-10: 8rem; /* 128 px */
+
+  /* Layout */
+  --page-gutter: 1.25rem; /* 20 px; 32 px from 768, 48 px from 1100 */
+  --container: 72rem;
+  --measure: 68ch;
+  --margin-col: 15rem;
+  --col-gap: 3rem;
+  --header-h: 3.5rem; /* 56 px; 64 px from 1100 */
+  --target-min: 44px;
+
+  /* Shape: px, so lines and corners stay crisp at any font size */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --line-width: 1px;
+  --line-width-strong: 2px;
+  --focus-width: 2px;
+  --focus-offset: 2px;
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-base: 160ms;
+  --ease-out: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Breakpoints can't use custom properties inside @media, so the four
+   values (600, 768, 1100, 1440 px) are written as literals. They are the
+   only min-width values allowed anywhere in the CSS. */
+@media (min-width: 768px) {
+  :root {
+    --page-gutter: 2rem;
+  }
+}
+@media (min-width: 1100px) {
+  :root {
+    --page-gutter: 3rem;
+    --header-h: 4rem;
+  }
+}
+
+/* Colour: dark. Applies when the device is dark and the visitor hasn't
+   picked Light, or when the visitor picked Dark (D66).
+   Keep these two blocks identical. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --color-bg: #141310;
+    --color-surface: #1d1c18;
+    --color-text: #edeae3;
+    --color-text-muted: #a6a195;
+    --color-line: #2d2b26;
+    --color-line-strong: #6e685d;
+    --color-accent: #8492f5;
+    --color-accent-hover: #a6b0f9;
+    --color-accent-tint: #23253d;
+    --color-on-accent: #141310;
+  }
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --color-bg: #141310;
+  --color-surface: #1d1c18;
+  --color-text: #edeae3;
+  --color-text-muted: #a6a195;
+  --color-line: #2d2b26;
+  --color-line-strong: #6e685d;
+  --color-accent: #8492f5;
+  --color-accent-hover: #a6b0f9;
+  --color-accent-tint: #23253d;
+  --color-on-accent: #141310;
+}
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Reduced motion: every transition becomes instant (DR-M3) */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}
+
+/* Print: black on white whatever the screen theme (DR-K15) */
+/* ":root:root" matches the theme selectors' weight, and comes later, so
+   print always wins over a dark or picked theme. */
+@media print {
+  :root:root {
+    color-scheme: light;
+    --color-bg: #ffffff;
+    --color-surface: #ffffff;
+    --color-text: #000000;
+    --color-text-muted: #333333;
+    --color-line: #cccccc;
+    --color-line-strong: #666666;
+    --color-accent: #000000;
+    --color-accent-hover: #000000;
+    --color-accent-tint: #eeeeee;
+    --color-on-accent: #ffffff;
+  }
+}
