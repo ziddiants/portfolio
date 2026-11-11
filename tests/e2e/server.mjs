@@ -3,7 +3,8 @@
 // It runs after `npm run build`; a missing dist/<id> stops it with exit code 1, so the suite can
 // never pass on a site that was not built. The fixture is built here in a temp copy of the repo.
 //
-// Env: E2E_DIST_ROOT overrides the dist/ folder (the test of the missing-build guard uses it).
+// Env: E2E_DIST_ROOT overrides the dist/ folder; E2E_SOURCE_DIRS (colon-separated) overrides the
+// folders a build is compared with. The guard tests use both.
 import { spawnSync } from 'node:child_process';
 import {
   cpSync,
@@ -18,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { linkNodeModules } from '../link-node-modules.mjs';
+import { staleBecause } from './fresh.mjs';
 import { FIXTURE_PAGE, SAMPLE_BYTES } from './fixture-page.mjs';
 import { PORTS } from './ports.mjs';
 import { serve } from './static-server.mjs';
@@ -25,9 +27,20 @@ import { serve } from './static-server.mjs';
 const REPO = fileURLToPath(new URL('../..', import.meta.url));
 const DIST = process.env.E2E_DIST_ROOT || join(REPO, 'dist');
 
+const SOURCES = (
+  process.env.E2E_SOURCE_DIRS ||
+  ['src', 'versions', 'public', 'astro.config.mjs'].map((p) => join(REPO, p)).join(':')
+).split(':');
+
 for (const id of ['payments', 'consumer']) {
-  if (!existsSync(join(DIST, id, 'index.html'))) {
-    console.error(`e2e: ${join(DIST, id, 'index.html')} is missing. Run "npm run build" first.`);
+  const page = join(DIST, id, 'index.html');
+  if (!existsSync(page)) {
+    console.error(`e2e: ${page} is missing. Run "npm run build" first.`);
+    process.exit(1);
+  }
+  const newer = staleBecause(page, SOURCES);
+  if (newer) {
+    console.error(`e2e: ${page} is older than ${newer}. Run "npm run build" first.`);
     process.exit(1);
   }
 }

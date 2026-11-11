@@ -26,7 +26,6 @@ async function findFile(root, urlPath) {
   } catch {
     return null;
   }
-  if (rel.includes('\0')) return null;
   const candidates = rel.endsWith('/') ? [`${rel}index.html`] : [rel, `${rel}.html`];
   for (const c of candidates) {
     const file = resolve(join(root, c));

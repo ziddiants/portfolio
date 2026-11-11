@@ -25,14 +25,15 @@ const bytes = statSync('.build/public-payments/sample.pdf').size;
     <p id="p1">First paragraph.</p>
     <p id="p2">Second paragraph.</p>
     <MarginNote kind="fact" source="S-014">A note under the paragraph.</MarginNote>
-    <p>
+    <p id="after">
       <span id="num" class="num">45% → 63%</span>
       <time id="time" datetime="2024-09-01">Sep 2024</time>
     </p>
     <p>
-      <Link id="inline" href="/fixture">Inline link</Link>
+      <Link id="inline" href="/fixture" data-kind="inline">Inline link</Link>
       <Link href="/fixture" variant="arrow">Arrow link</Link>
       <ExternalLink href="https://example.org/x">Outside link</ExternalLink>
+      <ExternalLink id="ext2" href="https://example.org/y" data-kind="ext">Second outside link</ExternalLink>
       <a id="plain-outside" href="https://example.org/plain">Plain outside link</a>
     </p>
     <p>

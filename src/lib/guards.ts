@@ -11,6 +11,13 @@ export function assertOutsideHref(href: string): void {
   }
 }
 
+/** ExternalLink owns rel and target: a caller's value would replace ours (Astro puts spread attributes last). */
+export function assertNoOwnAttributes(props: Record<string, unknown>): void {
+  for (const name of ['rel', 'target']) {
+    if (name in props) throw new Error(`ExternalLink: do not pass ${name}; the component sets it`);
+  }
+}
+
 /** MarginNote: a source ID such as S-014 (VF-05 checks it against the private register). */
 export function assertSourceId(source: string): void {
   if (!/^S-\d{3}$/.test(source)) throw new Error(`MarginNote: "${source}" is not a source ID`);

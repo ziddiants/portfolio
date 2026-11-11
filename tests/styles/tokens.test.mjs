@@ -9,6 +9,7 @@ import { SECTIONS } from '../../src/lib/sections.ts';
 import { downloadLabel, formatSize } from '../../src/lib/format-size.ts';
 import {
   assertFigure,
+  assertNoOwnAttributes,
   assertOutsideHref,
   assertSectionNumber,
   assertSourceId,
@@ -56,7 +57,7 @@ describe('TC-F02 / DT-02: every token pair meets WCAG AA in both themes', () => 
     }
   });
 
-  test('20 pairs: each is at or above its bar and equals the number in the design doc', () => {
+  test('20 pairs: each is at or above its bar and equals the ratio the design doc recorded on 2 Nov', () => {
     let checked = 0;
     for (const [theme, block, col] of [
       ['light', tokens.base, 2],
@@ -202,11 +203,16 @@ describe('DT-22: file sizes in download labels', () => {
   });
 });
 
-describe('component input checks stop the build on one bad input each', () => {
+describe('component input checks (guards.ts): one bad input each', () => {
   test('ExternalLink: only outside addresses', () => {
     expect(() => assertOutsideHref('https://example.org')).not.toThrow();
     for (const bad of ['/work', 'mailto:a@b.co', 'example.org', 'javascript:alert(1)'])
       expect(() => assertOutsideHref(bad), bad).toThrow(/ExternalLink/);
+  });
+  test('ExternalLink: a caller cannot pass rel or target', () => {
+    expect(() => assertNoOwnAttributes({ id: 'x', 'data-kind': 'y' })).not.toThrow();
+    for (const name of ['rel', 'target'])
+      expect(() => assertNoOwnAttributes({ [name]: 'v' }), name).toThrow(/ExternalLink/);
   });
   test('MarginNote: S- and three digits', () => {
     expect(() => assertSourceId('S-014')).not.toThrow();
@@ -226,5 +232,19 @@ describe('component input checks stop the build on one bad input each', () => {
     expect(() => assertFigure({ ...ok, alt: '' })).toThrow(/alt text/);
     expect(() => assertFigure({ ...ok, alt: undefined })).toThrow(/alt text/);
     expect(() => assertFigure({ ...ok, hasImage: false })).toThrow(/src or a diagram/);
+  });
+
+  test('each component source calls its check (a deleted call turns this red)', () => {
+    const WIRED = [
+      ['ExternalLink', 'assertOutsideHref('],
+      ['ExternalLink', 'assertNoOwnAttributes('],
+      ['MarginNote', 'assertSourceId('],
+      ['SectionHeader', 'assertSectionNumber('],
+      ['Figure', 'assertFigure('],
+    ];
+    for (const [name, call] of WIRED) {
+      const src = readFileSync(join(REPO, 'src', 'components', `${name}.astro`), 'utf8');
+      expect(src, name).toContain(call);
+    }
   });
 });

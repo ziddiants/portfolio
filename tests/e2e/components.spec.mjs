@@ -91,8 +91,8 @@ test('DT-16: every focusable element shows a 2 px ring with a 2 px offset', asyn
     if (!f) break;
     seen.push(f);
   }
-  // Inline, arrow and outside link, the plain outside link, and the three buttons.
-  expect(seen.length).toBe(7);
+  // Inline, arrow, two outside links, the plain outside link, and the three buttons.
+  expect(seen.length).toBe(8);
   for (const f of seen) {
     expect(f, f.text).toMatchObject({ style: 'solid', width: '2px', offset: '2px', color: accent });
   }
@@ -195,4 +195,26 @@ test('Figure and MarginNote render with their required parts', async ({ page }) 
   await expect(note.locator('.source')).toHaveText('S-014');
   // The aside sits right after the paragraph it supports, so reading order is right (DS-CMP-16).
   expect(await note.evaluate((el) => el.previousElementSibling?.id)).toBe('p2');
+});
+
+test('Link and ExternalLink pass other attributes through; ExternalLink sets rel and target', async ({
+  page,
+}) => {
+  await page.goto(FIXTURE);
+  expect(await page.locator('#inline').getAttribute('data-kind')).toBe('inline');
+  const ext = page.locator('#ext2');
+  expect(await ext.getAttribute('data-kind')).toBe('ext');
+  // rel and target are the component's own; a caller cannot pass them (assertNoOwnAttributes).
+  expect(await ext.getAttribute('target')).toBe('_blank');
+  expect((await ext.getAttribute('rel')).split(/\s+/).sort()).toEqual(['noopener', 'noreferrer']);
+});
+
+test('MarginNote leaves --space-4 before the next paragraph', async ({ page }) => {
+  await page.goto(FIXTURE);
+  const gap = await page.evaluate(() => {
+    const note = document.querySelector('aside.margin-note').getBoundingClientRect();
+    const after = document.querySelector('#after').getBoundingClientRect();
+    return after.top - note.bottom;
+  });
+  expect(gap).toBe(lengthPx(tokens.get('--space-4')));
 });

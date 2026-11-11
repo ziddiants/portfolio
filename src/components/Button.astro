@@ -1,12 +1,13 @@
 ---
 // DS-CMP-03. A real link (an <a>), never a <button>. One primary per view (DR-C1).
 // A download shows the type and size in its label (use downloadLabel) and gets the ↓ here.
-interface Props {
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends Omit<HTMLAttributes<'a'>, 'download'> {
   href: string;
   variant?: 'primary' | 'secondary';
   download?: boolean;
   fullWidth?: boolean;
-  class?: string;
 }
 const {
   href,
@@ -14,10 +15,12 @@ const {
   download = false,
   fullWidth = false,
   class: extra,
+  ...rest
 } = Astro.props;
 ---
 
 <a
+  {...rest}
   class:list={['button', variant, { full: fullWidth }, extra]}
   href={href}
   download={download ? '' : undefined}

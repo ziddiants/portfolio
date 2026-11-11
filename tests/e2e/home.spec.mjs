@@ -42,7 +42,7 @@ for (const id of ['payments', 'consumer']) {
       expect(s.heading?.length, `${anchor} has an h2`).toBeGreaterThan(0);
       expect(s.labelledBy).toBe(s.h2Id);
     });
-    // Each anchor is reachable: the browser can scroll to it.
+    // Each anchor exists exactly once on the page (the scroll itself is DT-12, ENG-13).
     for (const [anchor] of EXPECTED) {
       expect(await page.locator(`#${anchor}`).count()).toBe(1);
     }
@@ -82,7 +82,7 @@ for (const [device, pick, theme] of CASES) {
       const cs = getComputedStyle(document.documentElement);
       return Object.fromEntries(names.map((n) => [n, cs.getPropertyValue(n).trim().toLowerCase()]));
     }, COLOUR_TOKENS);
-    expect(Object.keys(got)).toHaveLength(COLOUR_TOKENS.length);
+    expect(Object.values(got).filter((v) => v.length > 0)).toHaveLength(COLOUR_TOKENS.length);
     for (const name of COLOUR_TOKENS)
       expect(canonHex(got[name]), `${name} in ${theme}`).toBe(canonHex(want.get(name)));
     // The tokens reach the page: the background and the text colour are the theme's.

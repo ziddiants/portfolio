@@ -1,17 +1,21 @@
 ---
 // DS-CMP-04 external, L3, VF-13. Opens in a new tab with rel="noopener noreferrer", shows ↗,
 // and tells screen readers "(opens in a new tab)". Every link to another site uses this.
-import { assertOutsideHref } from '../lib/guards';
+import { assertNoOwnAttributes, assertOutsideHref } from '../lib/guards';
 
-interface Props {
+import type { HTMLAttributes } from 'astro/types';
+
+interface Props extends Omit<HTMLAttributes<'a'>, 'rel' | 'target'> {
   href: string;
-  class?: string;
 }
-const { href, class: extra } = Astro.props;
+// Other attributes pass through. target and rel belong to the component (L3, VF-13): a caller who
+// passes them stops the build, because Astro would put the caller's value after ours.
+const { href, class: extra, ...rest } = Astro.props;
 assertOutsideHref(href);
+assertNoOwnAttributes(rest);
 ---
 
-<a class={extra} href={href} target="_blank" rel="noopener noreferrer">
+<a {...rest} class={extra} href={href} target="_blank" rel="noopener noreferrer">
   <slot />
   <span class="mark" aria-hidden="true">
     {'↗'}
