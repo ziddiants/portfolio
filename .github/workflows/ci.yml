@@ -59,6 +59,17 @@ jobs:
       - run: npm run check
       - name: Build and verify every version
         run: npm run build
+      # Browser tests (ENG-12, D98): Chromium only; ENG-25 adds WebKit and Firefox. Chromium goes into
+      # its own folder so the ENG-11 preview-image tests, which skip without Chromium, still skip here
+      # (their pictures depend on the Mac's fonts). test:e2e needs the build above.
+      - name: Install Chromium for the browser tests
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
+        run: npx playwright install --with-deps chromium
+      - name: Browser tests (npm run test:e2e)
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/playwright-browsers
+        run: npm run test:e2e
       - run: npm run verify:ci
       - run: npm run test:unit
       - run: npm run test:versions
