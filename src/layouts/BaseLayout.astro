@@ -1,30 +1,40 @@
 ---
-// The page shell (ERD § Layouts). ENG-12 builds the frame and the head slots:
-//   head-start  first element in <head>, before any stylesheet (ENG-13 puts the theme script here)
-//   head        after the title (ENG-22 puts every head tag here; the icon links are ENG-22's too)
-// Skip link, header and footer are ENG-13.
+// The page shell (ERD § Layouts): the theme script, skip link, header, main, footer.
+//   head   after the title (ENG-22 puts every head tag here; the icon links are ENG-22's too)
+// The theme script is the first element in <head>, before the charset and any stylesheet, so a saved
+// pick is on <html> before first paint (DT-38). `current` marks the nav item of a case-study or
+// project page (SiteHeader).
 import '../styles/tokens.css';
 import '../styles/base.css';
 import '../styles/layout.css';
+import Footer from '../components/Footer.astro';
+import SiteHeader from '../components/SiteHeader.astro';
+import SkipLink from '../components/SkipLink.astro';
+import ThemeScript from '../components/ThemeScript.astro';
+import type { NavCurrent } from '../lib/sections';
 
 interface Props {
   title: string;
+  current?: NavCurrent;
 }
-const { title } = Astro.props;
+const { title, current } = Astro.props;
 ---
 
 <!doctype html>
 <html lang="en">
   <head>
-    <slot name="head-start" />
+    <ThemeScript />
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <slot name="head" />
   </head>
   <body>
+    <SkipLink />
+    <SiteHeader current={current} />
     <main id="content" class="container">
       <slot />
     </main>
+    <Footer />
   </body>
 </html>

@@ -9,6 +9,7 @@ export default defineConfig({
       'tests/content/**/*.test.mjs',
       'tests/assets/**/*.test.mjs',
       'tests/styles/**/*.test.mjs',
+      'tests/chrome/**/*.test.mjs',
       'tests/e2e/**/*.test.mjs',
     ],
     testTimeout: 60_000,

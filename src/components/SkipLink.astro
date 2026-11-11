@@ -1,0 +1,34 @@
+---
+// DS-CMP-20. The first focusable element on every page. Hidden until it has focus (keyboard only,
+// so there is no :focus-visible split here); then it sits top-left over the header.
+---
+
+<a class="skip-link" href="#content">
+  Skip to content
+</a>
+
+<style>
+  .skip-link:not(:focus) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .skip-link:focus {
+    position: fixed;
+    top: var(--space-2);
+    left: var(--space-2);
+    z-index: 2;
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-accent-tint);
+    color: var(--color-text);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    font-weight: var(--weight-semibold);
+    border-radius: var(--radius-sm);
+    /* It appears at once, in its final colours (the global link colour transition would flicker) */
+    transition: none;
+  }
+</style>

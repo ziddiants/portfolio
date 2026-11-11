@@ -16,10 +16,11 @@ import { basename, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadVersion, VersionError } from '../versions/load.mjs';
 import { resolveResume, stubResumePdf } from '../versions/resume.mjs';
+import { RESUME_NAME } from '../src/lib/resume-name.mjs';
 import { writeHeaders } from './write-headers.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
-export const RESUME_NAME = 'Aditya-Gupta-Resume.pdf';
+export { RESUME_NAME };
 
 /** Returns the absolute path of the assembled folder. Throws VersionError. */
 export function assemblePublic(id) {

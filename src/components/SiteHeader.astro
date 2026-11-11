@@ -1,0 +1,150 @@
+---
+// DS-CMP-01. Sticky, 56 px (64 px from 1100 px). From 1100 px: the name, the seven section links,
+// the theme button and a secondary Résumé button. Below: the name, the theme button and the Menu
+// button, whose panel (MobileMenu) opens below the header. One nav landmark holds all of it.
+// The link list comes from SECTIONS, so nobody retypes the nav. `current` marks the nav item of a
+// case-study or project page; on the home page the script marks the section on screen (DR-IX12).
+import { SECTIONS, type NavCurrent } from '../lib/sections';
+import { DOWNLOAD_BUSY, RESUME_NAME } from '../lib/resume-name.mjs';
+import Button from './Button.astro';
+import MobileMenu from './MobileMenu.astro';
+import ThemeToggle from './ThemeToggle.astro';
+
+interface Props {
+  current?: NavCurrent;
+}
+const { current } = Astro.props;
+---
+
+<header class="site-header" data-print="hide">
+  <nav aria-label="Main">
+    <div class="bar container">
+      <a class="name" href="/">
+        Aditya Gupta
+      </a>
+      <ul class="links">
+        {SECTIONS.map((s) => (
+          <li>
+            <a href={`/#${s.id}`} aria-current={current === s.id ? 'true' : undefined}>
+              {s.nav}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <ThemeToggle />
+      <span class="resume">
+        <Button href={`/${RESUME_NAME}`} variant="secondary" download busy={DOWNLOAD_BUSY}>
+          Résumé
+        </Button>
+        <!-- A hidden twin of the button (same label as the busy state, same arrow): it holds the room the button grows into,
+             so the links and the theme button do not move (D101). Not focusable, not read. -->
+        <Button
+          href={`/${RESUME_NAME}`}
+          variant="secondary"
+          download
+          class="twin"
+          tabindex="-1"
+          aria-hidden="true"
+        >
+          {DOWNLOAD_BUSY}
+        </Button>
+      </span>
+      <MobileMenu current={current} />
+    </div>
+  </nav>
+</header>
+
+<script>
+  import '../scripts/site';
+</script>
+
+<style>
+  .site-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--color-bg);
+    border-bottom: var(--line-width) solid var(--color-line);
+  }
+  /* Without JavaScript the phone menu is a tall list: it must not stay stuck over the page. */
+  @media (scripting: none) {
+    .site-header {
+      position: static;
+    }
+  }
+  .bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    column-gap: var(--space-3);
+  }
+  .name {
+    display: inline-flex;
+    align-items: center;
+    /* The header is --header-h tall in all, with its 1 px rule */
+    min-height: calc(var(--header-h) - var(--line-width));
+    margin-inline-end: auto;
+    color: var(--color-text);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    font-weight: var(--weight-semibold);
+    text-decoration-line: none;
+  }
+  @media (hover: hover) {
+    .name:hover {
+      color: var(--color-text);
+      text-decoration-line: underline;
+    }
+  }
+  .links {
+    display: none;
+    gap: var(--space-5);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .links a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    text-decoration-line: none;
+    /* The mark moves with no animation (DR-IX12) */
+    transition: none;
+  }
+  @media (hover: hover) {
+    .links a:hover {
+      color: var(--color-text);
+      text-decoration-line: underline;
+    }
+  }
+  .links a[aria-current='true'] {
+    color: var(--color-text);
+    text-decoration-line: underline;
+    text-decoration-color: var(--color-accent);
+    text-decoration-thickness: var(--line-width-strong);
+  }
+  .resume {
+    display: none;
+    justify-items: end;
+  }
+  .resume :global(a) {
+    grid-area: 1 / 1;
+  }
+  .resume :global(.twin) {
+    visibility: hidden;
+  }
+  @media (min-width: 1100px) {
+    .site-header {
+      position: sticky;
+    }
+    .links {
+      display: flex;
+    }
+    .resume {
+      display: inline-grid;
+    }
+  }
+</style>

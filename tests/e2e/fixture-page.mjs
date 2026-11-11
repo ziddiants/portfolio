@@ -1,5 +1,6 @@
 // The component fixture page (ENG-12). Components that no real page uses yet (Button, Link,
-// ExternalLink, Figure, MarginNote) are tested here. The page is written into a temp copy of
+// ExternalLink, Figure, MarginNote) are tested here. ENG-13 adds `current` (the nav mark) and two
+// theme-color metas, which ENG-22 puts on the real pages. The page is written into a temp copy of
 // the repo and built there; it never reaches dist/ or git.
 export const SAMPLE_BYTES = 118_400; // shown as "118 KB"
 export const SAMPLE_LABEL = 'Résumé · PDF, 118 KB';
@@ -18,10 +19,13 @@ import { downloadLabel } from '../lib/format-size';
 
 const bytes = statSync('.build/public-payments/sample.pdf').size;
 ---
-<BaseLayout title="Fixture">
+<BaseLayout title="Fixture" current="work">
+  <meta slot="head" name="theme-color" content="#faf8f4" media="(prefers-color-scheme: light)" />
+  <meta slot="head" name="theme-color" content="#141310" media="(prefers-color-scheme: dark)" />
   <h1>Fixture</h1>
   <section id="fx" class="home-section" aria-labelledby="fx-heading">
     <SectionHeader number="01" name="Selected work" heading="A heading" headingId="fx-heading" intro="An intro line." />
+    <h3 id="about">A heading whose anchor is named like a home section</h3>
     <p id="p1">First paragraph.</p>
     <p id="p2">Second paragraph.</p>
     <MarginNote kind="fact" source="S-014">A note under the paragraph.</MarginNote>

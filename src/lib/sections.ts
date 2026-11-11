@@ -52,3 +52,6 @@ export const SECTIONS = [
     heading: 'The rest is better in conversation',
   },
 ] as const;
+
+// The two nav items a detail page can mark as its own (DS-CMP-01): case studies are Work, projects are Projects.
+export type NavCurrent = 'work' | 'projects';

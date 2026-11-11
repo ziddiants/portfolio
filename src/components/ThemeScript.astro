@@ -1,0 +1,12 @@
+---
+// The head theme script (design-brand.md § Engineering handoff, "The theme script"). It must be the
+// first element in <head>, so a saved pick is on <html> before any stylesheet (DT-38). The text is
+// fixed: ENG-23 computes its SHA-256 for script-src. Keep it far below 1024 bytes.
+---
+
+<script is:inline>
+  try {
+    var t = localStorage.getItem('theme');
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch (e) {}
+</script>
