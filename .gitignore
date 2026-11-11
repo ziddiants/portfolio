@@ -33,3 +33,7 @@ CLAUDE.md
 # Logs
 *.log
 npm-debug.log*
+
+# Playwright (ENG-12)
+test-results/
+playwright-report/

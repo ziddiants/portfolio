@@ -1,7 +1,7 @@
 // Builds the site icons from the one mark (DS-MARK) into public/ (shared by both versions).
 // Run by hand: `npm run assets:icons`. The outputs are committed.
 // The files use the conventional root names, which browsers request without a <link> tag.
-// The <link> and theme-color tags are added by ENG-12 (head slots) and ENG-22.
+// The <link> and theme-color tags are added by ENG-22 (ENG-12 builds the empty head slots).
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -1,0 +1,26 @@
+---
+// DS-CMP-04 external, L3, VF-13. Opens in a new tab with rel="noopener noreferrer", shows ↗,
+// and tells screen readers "(opens in a new tab)". Every link to another site uses this.
+import { assertOutsideHref } from '../lib/guards';
+
+interface Props {
+  href: string;
+  class?: string;
+}
+const { href, class: extra } = Astro.props;
+assertOutsideHref(href);
+---
+
+<a class={extra} href={href} target="_blank" rel="noopener noreferrer">
+  <slot />
+  <span class="mark" aria-hidden="true">
+    {'↗'}
+  </span>
+  <span class="visually-hidden">{' (opens in a new tab)'}</span>
+</a>
+
+<style>
+  .mark {
+    margin-inline-start: var(--space-1);
+  }
+</style>

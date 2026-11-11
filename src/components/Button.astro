@@ -1,0 +1,93 @@
+---
+// DS-CMP-03. A real link (an <a>), never a <button>. One primary per view (DR-C1).
+// A download shows the type and size in its label (use downloadLabel) and gets the ↓ here.
+interface Props {
+  href: string;
+  variant?: 'primary' | 'secondary';
+  download?: boolean;
+  fullWidth?: boolean;
+  class?: string;
+}
+const {
+  href,
+  variant = 'primary',
+  download = false,
+  fullWidth = false,
+  class: extra,
+} = Astro.props;
+---
+
+<a
+  class:list={['button', variant, { full: fullWidth }, extra]}
+  href={href}
+  download={download ? '' : undefined}
+>
+  <slot />
+  {download && (
+    <span class="mark" aria-hidden="true">
+      ↓
+    </span>
+  )}
+</a>
+
+<style>
+  .mark {
+    margin-inline-start: var(--space-1);
+  }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    min-height: var(--target-min);
+    /* 20 px: 16 + 4 on the space scale */
+    padding: 0 calc(var(--space-4) + var(--space-1));
+    /* Transparent, so the edge of a filled button still shows in high-contrast mode (DR-A10) */
+    border: var(--line-width) solid transparent;
+    border-radius: var(--radius-sm);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    font-weight: var(--weight-semibold);
+    text-decoration: none;
+    transition:
+      background-color var(--duration-fast) var(--ease-out),
+      border-color var(--duration-fast) var(--ease-out),
+      color var(--duration-fast) var(--ease-out);
+  }
+  .primary {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+  .secondary {
+    background: transparent;
+    border-color: var(--color-line-strong);
+    color: var(--color-text);
+  }
+  .primary:active {
+    background: var(--color-accent-hover);
+  }
+  .secondary:active {
+    border-color: var(--color-text);
+  }
+  @media (hover: hover) {
+    .primary:hover {
+      background: var(--color-accent-hover);
+      color: var(--color-on-accent);
+    }
+    .secondary:hover {
+      border-color: var(--color-text);
+      color: var(--color-text);
+    }
+  }
+  /* Full width on phones: 48 px tall */
+  .full {
+    width: 100%;
+    min-height: var(--space-7);
+  }
+  @media (min-width: 768px) {
+    .full {
+      width: auto;
+      min-height: var(--target-min);
+    }
+  }
+</style>

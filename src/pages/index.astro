@@ -1,17 +1,26 @@
 ---
-// Placeholder page. It shows two version fields so the multi-version tests (TC-A02, TC-A03)
-// have something to compare. The real home page is M2.
+// The home page frame (ENG-12): the hero block and the seven sections in H1 order, each with its
+// header and no content yet. ENG-13 to ENG-17 fill the sections.
 import version from '@version';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import SectionHeader from '../components/SectionHeader.astro';
+import { SECTIONS } from '../lib/sections';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{version.pageTitle}</title>
-  </head>
-  <body>
+<BaseLayout title={version.pageTitle}>
+  <!-- Placeholder hero: ENG-14 replaces it. It keeps the page's one h1 until then (VF-11, TC-A02). -->
+  <section>
     <h1>Portfolio</h1>
     <p>{version.heroSubline}</p>
-  </body>
-</html>
+  </section>
+  {SECTIONS.map((s) => (
+    <section id={s.id} class="home-section" aria-labelledby={`${s.id}-heading`}>
+      <SectionHeader
+        number={s.number}
+        name={s.name}
+        heading={s.heading}
+        headingId={`${s.id}-heading`}
+      />
+    </section>
+  ))}
+</BaseLayout>

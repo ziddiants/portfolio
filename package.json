@@ -35,7 +35,8 @@
     "assets:gpay": "node scripts/assets/gpay.mjs",
     "assets:og": "node scripts/assets/og.mjs",
     "assets:scan": "node scripts/assets/scan-built.mjs",
-    "test:unit": "vitest run"
+    "test:unit": "vitest run",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@astrojs/sitemap": "3.7.4",
@@ -43,6 +44,7 @@
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
+    "@playwright/test": "1.63.0",
     "parse5": "8.1.0",
     "playwright-core": "1.63.0",
     "prettier": "3.9.10",

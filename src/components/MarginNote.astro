@@ -1,0 +1,58 @@
+---
+// DS-CMP-16 (the ERD's "Callout"). Labels a statement as Fact or Assumption, with its source ID.
+// An <aside> placed right after its paragraph. ENG-12 builds the one-column layout (under the
+// paragraph, a rule on the left); the margin column from 1100 px is ENG-18.
+import { assertSourceId } from '../lib/guards';
+
+interface Props {
+  kind: 'fact' | 'assumption';
+  source: string;
+}
+const { kind, source } = Astro.props;
+assertSourceId(source);
+const label = kind === 'fact' ? 'Fact' : 'Assumption';
+---
+
+<aside class="margin-note">
+  <p class="head">
+    <span class="tag">{label}</span>
+    <span class="source">{source}</span>
+  </p>
+  <p class="note">
+    <slot />
+  </p>
+</aside>
+
+<style>
+  .margin-note {
+    margin-top: var(--space-3);
+    margin-left: var(--space-4);
+    padding-left: var(--space-4);
+    border-left: var(--line-width-strong) solid var(--color-line-strong);
+  }
+  .head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 var(--space-2);
+  }
+  .tag {
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-xs);
+    padding: var(--space-1) var(--space-2);
+    font-size: var(--text-label);
+    line-height: var(--leading-label);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  .source {
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+  }
+  .note {
+    margin: 0;
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+  }
+</style>

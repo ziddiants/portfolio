@@ -1,0 +1,96 @@
+/* src/styles/base.css
+   Applies design-brand.md § Craft details and § Accessibility. Tokens only. */
+
+html {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+body {
+  margin: 0;
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  font-weight: var(--weight-regular);
+}
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: var(--weight-semibold);
+  text-wrap: balance;
+}
+p,
+li,
+dd,
+figcaption {
+  max-width: var(--measure);
+  text-wrap: pretty;
+}
+time,
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+}
+
+::selection {
+  background: var(--color-accent-tint);
+  color: var(--color-text);
+}
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--color-accent);
+  outline-offset: var(--focus-offset);
+}
+
+a {
+  color: var(--color-accent);
+  text-decoration-line: underline;
+  text-decoration-thickness: var(--line-width);
+  text-underline-offset: 0.2em;
+  text-decoration-skip-ink: auto;
+  transition: color var(--duration-fast) var(--ease-out);
+}
+@media (hover: hover) {
+  a:hover {
+    color: var(--color-accent-hover);
+    text-decoration-thickness: var(--line-width-strong);
+  }
+}
+
+[id] {
+  scroll-margin-top: calc(var(--header-h) + var(--space-5));
+}
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media print {
+  [data-print='hide'] {
+    display: none;
+  }
+  a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: var(--text-small);
+  }
+}

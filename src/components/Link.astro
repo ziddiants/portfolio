@@ -1,0 +1,34 @@
+---
+// DS-CMP-04, the two inside-the-site kinds. Inline: accent text, underlined (base.css).
+// Arrow: text and →, no underline until hover. A link that leaves the site is ExternalLink.
+// Link text says where it goes.
+interface Props {
+  href: string;
+  variant?: 'inline' | 'arrow';
+  class?: string;
+}
+const { href, variant = 'inline', class: extra } = Astro.props;
+---
+
+<a class:list={[variant, extra]} href={href}>
+  <slot />
+  {variant === 'arrow' && (
+    <span class="mark" aria-hidden="true">
+      →
+    </span>
+  )}
+</a>
+
+<style>
+  .mark {
+    margin-inline-start: var(--space-1);
+  }
+  .arrow {
+    text-decoration-line: none;
+  }
+  @media (hover: hover) {
+    .arrow:hover {
+      text-decoration-line: underline;
+    }
+  }
+</style>

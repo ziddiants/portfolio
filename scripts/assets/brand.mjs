@@ -1,6 +1,6 @@
 // Brand values for files that cannot read tokens.css: the icons, the manifest and the preview image.
 // Each value is the light-theme value of the token named beside it (design-brand.md, Colour).
-// tokens.css lands in ENG-12; ENG-12 adds a test that compares this file with tokens.css.
+// tests/styles/tokens.test.mjs compares this file with src/styles/tokens.css (ENG-12).
 export const BRAND = {
   bg: '#FAF8F4', // --color-bg
   text: '#1C1B18', // --color-text

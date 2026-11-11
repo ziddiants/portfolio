@@ -1,0 +1,30 @@
+---
+// The page shell (ERD § Layouts). ENG-12 builds the frame and the head slots:
+//   head-start  first element in <head>, before any stylesheet (ENG-13 puts the theme script here)
+//   head        after the title (ENG-22 puts every head tag here; the icon links are ENG-22's too)
+// Skip link, header and footer are ENG-13.
+import '../styles/tokens.css';
+import '../styles/base.css';
+import '../styles/layout.css';
+
+interface Props {
+  title: string;
+}
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <slot name="head-start" />
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <slot name="head" />
+  </head>
+  <body>
+    <main id="content" class="container">
+      <slot />
+    </main>
+  </body>
+</html>
