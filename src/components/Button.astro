@@ -1,6 +1,9 @@
 ---
 // DS-CMP-03. A real link (an <a>), never a <button>. One primary per view (DR-C1).
 // A download shows the type and size in its label (use downloadLabel) and gets the ↓ here.
+// `busy` (a download that has a cue, D101): the label that replaces the normal one for 2 seconds
+// after a click (src/scripts/site.ts sets data-wait). The button is as wide as its label, so it
+// grows with the busy label: where something sits beside it, keep room free (SiteHeader does).
 import type { HTMLAttributes } from 'astro/types';
 
 interface Props extends Omit<HTMLAttributes<'a'>, 'download'> {
@@ -8,12 +11,14 @@ interface Props extends Omit<HTMLAttributes<'a'>, 'download'> {
   variant?: 'primary' | 'secondary';
   download?: boolean;
   fullWidth?: boolean;
+  busy?: string;
 }
 const {
   href,
   variant = 'primary',
   download = false,
   fullWidth = false,
+  busy,
   class: extra,
   ...rest
 } = Astro.props;
@@ -24,8 +29,18 @@ const {
   class:list={['button', variant, { full: fullWidth }, extra]}
   href={href}
   download={download ? '' : undefined}
+  data-cue={download && busy ? '' : undefined}
 >
-  <slot />
+  {download && busy ? (
+    <>
+      <span class="idle">
+        <slot />
+      </span>
+      <span class="busy">{busy}</span>
+    </>
+  ) : (
+    <slot />
+  )}
   {download && (
     <span class="mark" aria-hidden="true">
       ↓
@@ -34,6 +49,13 @@ const {
 </a>
 
 <style>
+  .busy,
+  [data-wait] .idle {
+    display: none;
+  }
+  [data-wait] .busy {
+    display: inline;
+  }
   .mark {
     margin-inline-start: var(--space-1);
   }

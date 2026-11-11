@@ -1,0 +1,28 @@
+---
+// DS-CMP-19. A hairline, then one muted line. The date is the build date in India (formatBuildDate).
+import { formatBuildDate } from '../lib/build-date';
+
+const updated = formatBuildDate(new Date());
+---
+
+<footer class="site-footer container">
+  <div class="rule">
+    <p>© 2026 Aditya Gupta · Updated {updated}</p>
+  </div>
+</footer>
+
+<style>
+  .site-footer {
+    margin-top: var(--space-8);
+  }
+  .rule {
+    padding-block: var(--space-5) var(--space-6);
+    border-top: var(--line-width) solid var(--color-line);
+  }
+  p {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+  }
+</style>

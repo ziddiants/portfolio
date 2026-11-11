@@ -19,7 +19,7 @@ test('DT-06: type sizes follow the scale at 360, 768, 1280 and 1920 px', async (
     ['body', '#p1', '--text-body'],
     ['h2', '#fx h2', '--text-h2'],
     ['lead', '#fx .intro', '--text-lead'],
-    ['small', 'a.button', '--text-small'],
+    ['small', '#fx a.button', '--text-small'],
     ['label', '#fx .label', '--text-label'],
   ];
   for (const width of [360, 768, 1280, 1920]) {
@@ -74,7 +74,7 @@ test('DT-16: every focusable element shows a 2 px ring with a 2 px offset', asyn
   await page.goto(FIXTURE);
   const accent = toRgbString(tokens.get('--color-accent'));
   const seen = [];
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++) {
     await page.keyboard.press('Tab');
     const f = await page.evaluate(() => {
       const el = document.activeElement;
@@ -82,6 +82,7 @@ test('DT-16: every focusable element shows a 2 px ring with a 2 px offset', asyn
       const cs = getComputedStyle(el);
       return {
         text: el.textContent.trim().slice(0, 20),
+        inMain: el.closest('main') !== null,
         style: cs.outlineStyle,
         width: cs.outlineWidth,
         offset: cs.outlineOffset,
@@ -91,8 +92,10 @@ test('DT-16: every focusable element shows a 2 px ring with a 2 px offset', asyn
     if (!f) break;
     seen.push(f);
   }
-  // Inline, arrow, two outside links, the plain outside link, and the three buttons.
-  expect(seen.length).toBe(8);
+  // In the content: inline, arrow, two outside links, the plain outside link, and the three buttons.
+  expect(seen.filter((f) => f.inMain)).toHaveLength(8);
+  // In the page chrome (ENG-13): the skip link, the name, seven links, the theme button, Résumé.
+  expect(seen.filter((f) => !f.inMain).length).toBe(11);
   for (const f of seen) {
     expect(f, f.text).toMatchObject({ style: 'solid', width: '2px', offset: '2px', color: accent });
   }
@@ -104,21 +107,21 @@ test('DT-16: buttons are at least 44 px tall (48 px full width on phones); hover
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto(FIXTURE);
   const box = (selector) => page.locator(selector).first().boundingBox();
-  for (const b of await page.locator('a.button').all()) {
+  for (const b of await page.locator('#fx a.button').all()) {
     expect((await b.boundingBox()).height).toBeGreaterThanOrEqual(44);
   }
-  const wide = await box('a.button.wide');
+  const wide = await box('#fx a.button.wide');
   expect(wide.height).toBeGreaterThanOrEqual(48);
   const main = await box('main');
   const gutter = lengthPx(tokens.get('--page-gutter'));
   expect(Math.round(wide.width)).toBe(Math.round(main.width - 2 * gutter));
 
   await page.setViewportSize({ width: 1280, height: 800 });
-  const desktopWide = await box('a.button.wide');
+  const desktopWide = await box('#fx a.button.wide');
   expect(desktopWide.height).toBeGreaterThanOrEqual(44);
   expect(desktopWide.width).toBeLessThan(400);
 
-  const primary = page.locator('a.button.primary').first();
+  const primary = page.locator('#fx a.button.primary').first();
   const before = await primary.evaluate((el) => ({
     bg: getComputedStyle(el).backgroundColor,
     rect: JSON.stringify(el.getBoundingClientRect()),
@@ -155,7 +158,7 @@ test('DT-22: an outside link shows ↗, says it opens a new tab, and carries rel
 
 test('DT-22: the download label names the type and the real size of the file', async ({ page }) => {
   await page.goto(FIXTURE);
-  const button = page.locator('a[download]');
+  const button = page.locator('#fx a[download]');
   await expect(page.getByRole('link', { name: SAMPLE_LABEL, exact: true })).toHaveCount(1);
   expect(await button.locator('.mark').textContent()).toBe('↓');
   // The file the button points at is the size the label says (118,400 bytes → 118 KB).

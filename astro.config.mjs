@@ -25,6 +25,12 @@ export default defineConfig({
   outDir: `dist/${v.id}`,
   integrations: v.indexable ? [sitemap()] : [],
   vite: {
+    build: {
+      // Our scripts ship as files under /_astro/, never inline: the security header (ENG-23) allows
+      // exactly one inline script, the theme script, by its hash. Astro inlines any script chunk
+      // under 4 KB unless told otherwise. Returning undefined keeps its default for CSS and images.
+      assetsInlineLimit: (file) => (file.endsWith('.js') ? false : undefined),
+    },
     resolve: {
       // Exact match, absolute path: "@version" is this version's settings file and nothing else.
       alias: [

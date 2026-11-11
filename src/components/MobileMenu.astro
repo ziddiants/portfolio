@@ -1,0 +1,184 @@
+---
+// DS-CMP-02. Below 1100 px: the Menu button and the panel it opens (a disclosure, not a dialog).
+// Both are children of the header bar. The panel opens below the header over the page, in 160 ms.
+// Without JavaScript (DR-IX9) the button is hidden and the panel is a plain list in the page flow.
+// src/scripts/site.ts sets aria-expanded on the button; the CSS reads it for the label, the icon and
+// the panel, so the script has nothing else to update.
+import { SECTIONS, type NavCurrent } from '../lib/sections';
+import { DOWNLOAD_BUSY, RESUME_NAME } from '../lib/resume-name.mjs';
+import Button from './Button.astro';
+
+interface Props {
+  current?: NavCurrent;
+}
+const { current } = Astro.props;
+---
+
+<button type="button" class="menu-button" aria-expanded="false" aria-controls="site-menu">
+  <span class="open-text">Menu</span>
+  <span class="close-text">Close</span>
+  <svg
+    class="open-icon"
+    viewBox="0 0 20 20"
+    width="20"
+    height="20"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M3 6h14M3 14h14"></path>
+  </svg>
+  <svg
+    class="close-icon"
+    viewBox="0 0 20 20"
+    width="20"
+    height="20"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="1.5"
+    stroke-linecap="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d="M4 4l12 12M16 4L4 16"></path>
+  </svg>
+</button>
+<div class="panel" id="site-menu">
+  <ul>
+    {SECTIONS.map((s) => (
+      <li>
+        <a href={`/#${s.id}`} aria-current={current === s.id ? 'true' : undefined}>
+          {s.nav}
+        </a>
+      </li>
+    ))}
+    <li>
+      <Button href={`/${RESUME_NAME}`} variant="secondary" download fullWidth busy={DOWNLOAD_BUSY}>
+        Résumé
+      </Button>
+    </li>
+  </ul>
+</div>
+
+<style>
+  .menu-button {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: var(--target-min);
+    min-height: var(--target-min);
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-text);
+    font: inherit;
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    font-weight: var(--weight-semibold);
+    cursor: pointer;
+  }
+  /* The label and the icon follow aria-expanded; a hidden label is not part of the button's name. */
+  .close-text,
+  .close-icon,
+  .menu-button[aria-expanded='true'] .open-text,
+  .menu-button[aria-expanded='true'] .open-icon {
+    display: none;
+  }
+  .menu-button[aria-expanded='true'] .close-text {
+    display: inline;
+  }
+  .menu-button[aria-expanded='true'] .close-icon {
+    display: block;
+  }
+
+  /* Below the header, full width, over the page. Hidden by visibility (not display), so it can fade. */
+  .panel {
+    position: absolute;
+    top: calc(100% + var(--line-width));
+    left: 0;
+    right: 0;
+    box-sizing: border-box;
+    padding: 0 var(--page-gutter) var(--space-4);
+    background: var(--color-bg);
+    border-bottom: var(--line-width) solid var(--color-line);
+    /* Taller than a short window (a phone turned sideways)? The panel scrolls inside the window:
+       the header is sticky, so the page cannot scroll the last links into view. */
+    max-height: calc(100vh - var(--header-h) - var(--line-width));
+    max-height: calc(100dvh - var(--header-h) - var(--line-width));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 0;
+    visibility: hidden;
+    /* No clicks on a panel that is fading out */
+    pointer-events: none;
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      visibility 0s linear var(--duration-base);
+  }
+  :global(.site-header:has(.menu-button[aria-expanded='true'])) .panel {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transition-delay: 0s;
+  }
+  ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li + li {
+    border-top: var(--line-width) solid var(--color-line);
+  }
+  li {
+    display: flex;
+    align-items: center;
+    min-height: var(--space-7);
+  }
+  a {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-height: var(--space-7);
+    color: var(--color-text);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    text-decoration-line: none;
+  }
+  li:last-child {
+    padding-block: var(--space-3);
+  }
+  a[aria-current='true'] {
+    text-decoration-line: underline;
+    text-decoration-color: var(--color-accent);
+    text-decoration-thickness: var(--line-width-strong);
+  }
+
+  /* Without JavaScript: no button, and the list sits in the page under the header bar. */
+  @media (scripting: none) {
+    .menu-button {
+      display: none;
+    }
+    .panel {
+      position: static;
+      flex-basis: 100%;
+      padding: 0 0 var(--space-4);
+      border-bottom: 0;
+      max-height: none;
+      overflow: visible;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+    }
+  }
+  /* From 1100 px the full nav takes over. */
+  @media (min-width: 1100px) {
+    .menu-button,
+    .panel {
+      display: none;
+    }
+  }
+</style>
