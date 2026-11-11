@@ -1,7 +1,6 @@
 // Style tests (ENG-12): TC-F02 / DT-02 (contrast), tokens.css and base.css against the design
 // doc, brand.mjs against tokens.css, the section copy against the design doc, formatSize (DT-22).
 import { existsSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { parseCss } from '../../scripts/verify/lib/css.mjs';

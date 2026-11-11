@@ -35,44 +35,60 @@ for (const id of ['payments', 'consumer']) {
 /** Builds the fixture site in a temp copy of the repo; returns { copy, dist }. */
 function buildFixture() {
   const copy = mkdtempSync(join(tmpdir(), 'eng12-fixture-'));
-  // Only regular files git sees (tracked, or new and not ignored): never CLAUDE.md or .inputs/.
-  const listed = spawnSync(
-    'git',
-    ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
-    {
-      cwd: REPO,
+  try {
+    // Only regular files git sees (tracked, or new and not ignored): never CLAUDE.md or .inputs/.
+    const listed = spawnSync(
+      'git',
+      ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
+      {
+        cwd: REPO,
+        encoding: 'utf8',
+      },
+    );
+    if (listed.status !== 0) throw new Error(`git ls-files failed: ${listed.stderr}`);
+    const files = listed.stdout
+      .split('\0')
+      .filter((f) => f && existsSync(join(REPO, f)) && lstatSync(join(REPO, f)).isFile());
+    if (files.length === 0) throw new Error('git ls-files listed no files');
+    for (const f of files) cpSync(join(REPO, f), join(copy, f), { recursive: false });
+    linkNodeModules(copy);
+    writeFileSync(join(copy, 'src', 'pages', 'fixture.astro'), FIXTURE_PAGE);
+    // The fixture needs one real file to link to; assemble-public (and its résumé) is not run.
+    mkdirSync(join(copy, '.build', 'public-payments'), { recursive: true });
+    writeFileSync(
+      join(copy, '.build', 'public-payments', 'sample.pdf'),
+      Buffer.alloc(SAMPLE_BYTES),
+    );
+    const r = spawnSync(join(copy, 'node_modules', '.bin', 'astro'), ['build'], {
+      cwd: copy,
+      env: { ...process.env, SITE_VERSION: 'payments' },
       encoding: 'utf8',
-    },
-  );
-  if (listed.status !== 0) throw new Error(`git ls-files failed: ${listed.stderr}`);
-  const files = listed.stdout
-    .split('\0')
-    .filter((f) => f && existsSync(join(REPO, f)) && lstatSync(join(REPO, f)).isFile());
-  if (files.length === 0) throw new Error('git ls-files listed no files');
-  for (const f of files) cpSync(join(REPO, f), join(copy, f), { recursive: false });
-  linkNodeModules(copy);
-  writeFileSync(join(copy, 'src', 'pages', 'fixture.astro'), FIXTURE_PAGE);
-  // The fixture needs one real file to link to; assemble-public (and its résumé) is not run.
-  mkdirSync(join(copy, '.build', 'public-payments'), { recursive: true });
-  writeFileSync(join(copy, '.build', 'public-payments', 'sample.pdf'), Buffer.alloc(SAMPLE_BYTES));
-  const r = spawnSync(join(copy, 'node_modules', '.bin', 'astro'), ['build'], {
-    cwd: copy,
-    env: { ...process.env, SITE_VERSION: 'payments' },
-    encoding: 'utf8',
-  });
-  if (r.status !== 0) {
-    console.error(r.stdout + r.stderr);
-    throw new Error('e2e: the fixture build failed');
+    });
+    if (r.status !== 0) {
+      console.error(r.stdout + r.stderr);
+      throw new Error('e2e: the fixture build failed');
+    }
+    return { copy, dist: join(copy, 'dist', 'payments') };
+  } catch (err) {
+    // A failed build must not leave the temp copy behind.
+    rmSync(copy, { recursive: true, force: true });
+    throw err;
   }
-  return { copy, dist: join(copy, 'dist', 'payments') };
 }
 
 const { copy, dist: fixtureDist } = buildFixture();
-const servers = [
-  await serve(join(DIST, 'payments'), PORTS.payments),
-  await serve(join(DIST, 'consumer'), PORTS.consumer),
-  await serve(fixtureDist, PORTS.fixture),
-];
+const servers = [];
+try {
+  servers.push(await serve(join(DIST, 'payments'), PORTS.payments));
+  servers.push(await serve(join(DIST, 'consumer'), PORTS.consumer));
+  servers.push(await serve(fixtureDist, PORTS.fixture));
+} catch (err) {
+  // A busy port must not leave the temp copy behind.
+  console.error(`e2e: could not start the servers: ${err.message}`);
+  for (const s of servers) s.close();
+  rmSync(copy, { recursive: true, force: true });
+  process.exit(1);
+}
 console.log(
   `e2e: serving payments :${PORTS.payments}, consumer :${PORTS.consumer}, fixture :${PORTS.fixture}`,
 );

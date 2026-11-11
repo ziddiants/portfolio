@@ -10,6 +10,8 @@ p + p {
 }
 
 .container {
+  /* border-box: the max-width counts the side padding, so the content column is 72rem */
+  box-sizing: border-box;
   max-width: calc(var(--container) + 2 * var(--page-gutter));
   margin-inline: auto;
   padding-inline: var(--page-gutter);

@@ -1,6 +1,12 @@
 // The real home pages (dist/payments, dist/consumer): TC-C01, TC-C12 and DT-27.
 import { expect, test } from '@playwright/test';
-import { COLOUR_TOKENS, canonHex, loadTokens, toRgbString } from '../styles/tokens-lib.mjs';
+import {
+  COLOUR_TOKENS,
+  canonHex,
+  lengthPx,
+  loadTokens,
+  toRgbString,
+} from '../styles/tokens-lib.mjs';
 import { BASE } from './ports.mjs';
 
 // PRD H1, written out here on purpose: the test does not read the order from the code under test.
@@ -113,5 +119,18 @@ for (const width of [360, 1280]) {
     expect(found.checked).toBeGreaterThan(10);
     expect(found.bad).toEqual([]);
     expect(found.widest).toBeLessThanOrEqual(2);
+  });
+}
+
+// Design § Space: --container (72rem) is the widest content area. It stops growing from 1440 px.
+for (const width of [1440, 1920]) {
+  test(`the content column is --container wide (72rem) at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(`${BASE.payments}/`);
+    const content = await page.$eval('main', (el) => {
+      const cs = getComputedStyle(el);
+      return el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    });
+    expect(content).toBe(lengthPx(loadTokens().base.get('--container')));
   });
 }
