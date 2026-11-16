@@ -1,18 +1,15 @@
 ---
-// The home page frame (ENG-12): the hero block and the seven sections in H1 order, each with its
-// header and no content yet. ENG-13 to ENG-17 fill the sections.
+// The home page frame (ENG-12): the hero and the seven sections in H1 order, each with its header
+// and no content yet. ENG-14 built the hero; ENG-15 to ENG-17 fill the sections.
 import version from '@version';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/Hero.astro';
 import SectionHeader from '../components/SectionHeader.astro';
 import { SECTIONS } from '../lib/sections';
 ---
 
 <BaseLayout title={version.pageTitle}>
-  <!-- Placeholder hero: ENG-14 replaces it. It keeps the page's one h1 until then (VF-11, TC-A02). -->
-  <section>
-    <h1>Portfolio</h1>
-    <p>{version.heroSubline}</p>
-  </section>
+  <Hero />
   {SECTIONS.map((s) => (
     <section id={s.id} class="home-section" aria-labelledby={`${s.id}-heading`}>
       <SectionHeader

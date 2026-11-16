@@ -1,0 +1,68 @@
+---
+// DS-CMP-08 and DS-SIG-1. A number set large with tabular figures: the before value muted, an
+// accent arrow, the after value in the text colour, and a short label under it. With a `before`
+// the visible parts are hidden from screen readers and one phrase ("from 45% to 63%") is read in
+// their place; it has user-select: none, so copying the figure gives "45% → 63%" (DR-IX16).
+// Without a `before` ("+16%") the figure is plain text. The spaces round the arrow are no-break
+// spaces: the build's HTML compression would drop ordinary ones, and the no-break spaces keep a figure on one line (DT-20).
+interface Props {
+  before?: string;
+  after: string;
+  label: string;
+}
+const { before, after, label } = Astro.props;
+---
+
+<li class="figure">
+  <p class="value">
+    {before === undefined ? (
+      <span class="after">{after}</span>
+    ) : (
+      <>
+        <span class="before" aria-hidden="true">
+          {before}
+        </span>
+        <span class="arrow" aria-hidden="true">
+          &nbsp;→&nbsp;
+        </span>
+        <span class="after" aria-hidden="true">
+          {after}
+        </span>
+        <span class="visually-hidden">{`from ${before} to ${after}`}</span>
+      </>
+    )}
+  </p>
+  <p class="label">{label}</p>
+</li>
+
+<style>
+  .figure {
+    min-width: 0;
+    /* The default arrow over a figure and its label (DR-IX13); the text can still be selected. */
+    cursor: default;
+  }
+  .value {
+    margin: 0;
+    font-size: var(--text-ledger);
+    line-height: var(--leading-ledger);
+    letter-spacing: var(--tracking-ledger);
+    font-weight: var(--weight-semibold);
+    font-variant-numeric: tabular-nums lining-nums;
+    color: var(--color-text);
+  }
+  .before {
+    color: var(--color-text-muted);
+  }
+  .arrow {
+    color: var(--color-accent);
+  }
+  .visually-hidden {
+    user-select: none;
+  }
+  .label {
+    margin: var(--space-2) 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+  }
+</style>

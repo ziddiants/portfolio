@@ -3,6 +3,8 @@
 // every approved number must be in that version's résumé. Figures are compared in one form:
 // lower case, no spaces, no commas, "Rs"/"INR" as "₹", "per cent" as "%", "×" as "x", one
 // kind of dash, no plus sign. The unit stays: "₹2.5L" is "₹2.5l", and "₹2.5 lakh" is another figure.
+// The hero proof strip (D106) also has counts the figure form does not see ("4K", "20K"): each value
+// of the strip must be in the résumé as a whole token (check proof-strip-in-resume).
 import { pdfFiles, pdfText } from '../lib/pdf.mjs';
 import { pages, readable } from '../lib/site.mjs';
 import { snippet } from '../lib/text.mjs';
@@ -35,13 +37,29 @@ export const normFigure = (s) =>
     .replace(/^\+/, '')
     .replace(/^−/, '-');
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// What may not stand right before a count: a letter, digit, point, comma or plus; a minus sign that
+// does not follow a letter or digit ("-4K" is negative, "4K-20K" is a range); or a currency mark
+// (₹, $, and Rs or INR as a word of their own, with or without a space). So "Rs 4K" and "4,4K" are
+// not a donor count of "4K", but "donors 4K" and "4K-20K" are (second review N2).
+const WORD_START = '(?<![\\p{L}\\p{N}])';
+const NOT_BEFORE =
+  '(?<![\\p{L}\\p{N}.,+])' +
+  `(?<!${WORD_START}[-−])` +
+  `(?<!(?:₹|\\$|${WORD_START}(?:Rs\\.?|INR))\\s*)`;
+
+/** True if the résumé text holds the strip value as a whole token: "4K" is not in "14K", "4Kg" or "Rs 4K". */
+export const hasToken = (text, value) =>
+  new RegExp(`${NOT_BEFORE}${escapeRe(value)}(?![\\p{L}\\p{N}])`, 'iu').test(text);
+
 /** Every figure in a text, in compared form. */
 export const figures = (text) => [...text.matchAll(FIGURE)].map((m) => normFigure(m[0]));
 
 export default {
   id: 'VF-08',
   title: 'Approved numbers',
-  checks: ['figures', 'resume-present', 'approved-in-resume'],
+  checks: ['figures', 'resume-present', 'approved-in-resume', 'proof-strip-in-resume'],
   needsPrivate: false,
   run(ctx) {
     const v = ctx.version;
@@ -95,6 +113,27 @@ export default {
           message: `approved number ${f[0]} is not in the résumé`,
           fix: 'remove it, or fix the résumé first: the site follows the résumé (T2)',
         });
+      }
+    }
+
+    const resumeText = pdfText(ctx, resume);
+    for (const item of v.proofStrip) {
+      for (const value of [item.before, item.after]) {
+        if (value === undefined) continue;
+        const f = figures(value);
+        // A figure ("63%", "+16%") is compared in its one form; anything else ("4K") as a token.
+        const found =
+          f.length === 1 && normFigure(value) === f[0]
+            ? inResume.has(f[0])
+            : hasToken(resumeText, value);
+        if (!found) {
+          findings.push({
+            check: 'proof-strip-in-resume',
+            file: where,
+            message: `proof strip value "${snippet(value, 40)}" (${snippet(item.label, 40)}) is not in the résumé`,
+            fix: 'the strip follows the résumé (T2): change the value, or fix the résumé first',
+          });
+        }
       }
     }
     return findings;

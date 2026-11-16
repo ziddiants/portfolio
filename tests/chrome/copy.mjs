@@ -11,6 +11,7 @@ export const NAV = [
   ['Contact', '/#contact'],
 ];
 export const NAME = 'Aditya Gupta';
+export const EYEBROW = 'Aditya Gupta · Product Manager';
 export const RESUME = 'Résumé';
 export const MENU = 'Menu';
 export const MENU_CLOSE = 'Close';

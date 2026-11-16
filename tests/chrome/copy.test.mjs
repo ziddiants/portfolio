@@ -32,6 +32,7 @@ describe.skipIf(!hasDoc)('chrome copy equals design-brand.md', () => {
     ['Header button', `"${C.RESUME}" + ↓`],
     ['Mobile menu button', `"${C.MENU}" / "${C.MENU_CLOSE}"`],
     ['Skip link', `"${C.SKIP}"`],
+    ['Hero eyebrow', `"${C.EYEBROW}"`],
     ['Download button after a click', `"${C.DOWNLOADING}"`],
     ['Footer', '"© 2026 Aditya Gupta · Updated {d Mon yyyy}"'],
   ])('%s', (where, want) => {

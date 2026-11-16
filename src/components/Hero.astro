@@ -1,0 +1,174 @@
+---
+// DS-CMP-06 (ENG-14, H2, V7, D67, D105). Order in the code and on the screen: eyebrow, h1 hero
+// line, the version's subline, the Résumé button and the Contact link, the domain chips, a hairline
+// and the proof strip. The Résumé button comes before the chips so it stays on a phone's first
+// screen (DT-04). The h1 starts with a hidden "Aditya Gupta: " so the page's main heading names him.
+// Copy comes from src/content/home/hero.yaml and the version settings. The eyebrow is fixed interface
+// copy (design doc § Interface copy, "Hero eyebrow"). The proof strip's layout follows the width of
+// its own box (D109), so no figure overflows up to 125% text; in a narrow box the ledger size
+// shrinks to fit, so a larger text setting stays inside the page (D110).
+import version from '@version';
+import { getEntry } from 'astro:content';
+import { DOWNLOAD_BUSY, RESUME_NAME } from '../lib/resume-name.mjs';
+import { downloadLabel } from '../lib/format-size';
+import { keepLastWordsTogether } from '../lib/hero-line';
+import { resumeBytes } from '../lib/resume-size';
+import Button from './Button.astro';
+import DomainChips from './DomainChips.astro';
+import LedgerFigure from './LedgerFigure.astro';
+import Link from './Link.astro';
+
+const hero = (await getEntry('hero', 'hero'))!.data;
+const heroLine = keepLastWordsTogether(hero.heroLine);
+const label = downloadLabel('Résumé', 'PDF', resumeBytes(version.id));
+const href = `/${RESUME_NAME}`;
+---
+
+<section class="hero">
+  <p class="eyebrow">Aditya Gupta · Product Manager</p>
+  <h1>
+    <span class="visually-hidden">Aditya Gupta: </span>
+    {heroLine}
+  </h1>
+  <p class="subline">{version.heroSubline}</p>
+  <div class="actions">
+    <span class="resume">
+      <Button href={href} download fullWidth busy={DOWNLOAD_BUSY}>
+        {label}
+      </Button>
+      {/* A hidden twin with the full label holds the room the button needs at rest: while the
+          button says "Downloading" (shorter), the Contact link beside it must not move (D101,
+          DT-44). Not focusable, not read. */}
+      <Button href={href} download fullWidth class="twin" tabindex="-1" aria-hidden="true">
+        {label}
+      </Button>
+    </span>
+    <Link href="#contact" variant="arrow" class="contact">
+      Contact
+    </Link>
+  </div>
+  <DomainChips chips={hero.domainChips} />
+  <div class="proof-box">
+    <ul class="proof" role="list" aria-label="Results" data-count={version.proofStrip.length}>
+      {version.proofStrip.map((figure) => (
+        <LedgerFigure {...figure} />
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .hero {
+    padding-top: var(--space-7);
+  }
+  .eyebrow {
+    margin: 0 0 var(--space-3);
+    color: var(--color-text-muted);
+    font-size: var(--text-label);
+    line-height: var(--leading-label);
+    font-weight: var(--weight-medium);
+    letter-spacing: var(--tracking-label);
+    text-transform: uppercase;
+  }
+  h1 {
+    max-width: 18ch;
+    font-size: var(--text-display);
+    line-height: var(--leading-display);
+    letter-spacing: var(--tracking-display);
+  }
+  .subline {
+    margin: var(--space-4) 0 0;
+    max-width: var(--measure);
+    color: var(--color-text-muted);
+    font-size: var(--text-lead);
+    line-height: var(--leading-lead);
+  }
+  .actions {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-4);
+    margin: var(--space-5) 0;
+  }
+  .actions > :global(a) {
+    align-self: flex-start;
+  }
+  .resume {
+    display: inline-grid;
+    justify-items: start;
+  }
+  .resume :global(a) {
+    grid-area: 1 / 1;
+  }
+  .resume :global(.twin) {
+    visibility: hidden;
+  }
+  /* A link is as tall as a button: a 44 px target (DR-A3) */
+  .actions :global(.contact) {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target-min);
+  }
+  /* The proof strip follows the width of its own box, in rem, so it holds at any text size (D109).
+     A figure is about 5.5 times as wide as the ledger size (3rem at most), so 18rem is the room
+     one needs: two columns from 39rem, a row of three from 60rem. Consumer's four figures stay two
+     by two: four need about 81rem and the box is at most 72rem. */
+  .proof-box {
+    container-type: inline-size;
+    margin-top: var(--space-6);
+  }
+  .proof {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    margin: 0;
+    padding: var(--space-5) 0 0;
+    border-top: var(--line-width) solid var(--color-line);
+    list-style: none;
+  }
+  /* Stacked: a hairline between the figures */
+  .proof > :global(li + li) {
+    padding-top: var(--space-5);
+    border-top: var(--line-width) solid var(--color-line);
+  }
+  /* D110: a figure needs about 5.5 times its font size and a single column is the whole box, so
+     15% of the box width keeps it inside at any text setting. In a wider box (two or more columns,
+     from 39rem) 15cqi is larger than the 3rem maximum, so nothing changes. */
+  .proof :global(.value) {
+    font-size: min(var(--text-ledger), 15cqi);
+  }
+  @container (min-width: 39rem) {
+    .proof {
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: var(--space-6) var(--space-7);
+    }
+    .proof > :global(li + li) {
+      padding-top: 0;
+      border-top: 0;
+    }
+    .proof > :global(li) {
+      flex: 0 0 calc(50% - var(--space-7) / 2);
+    }
+  }
+  @container (min-width: 60rem) {
+    .proof[data-count='3'] > :global(li) {
+      flex: 1 1 0;
+    }
+  }
+  @media (min-width: 768px) {
+    .actions {
+      flex-direction: row;
+      align-items: center;
+      gap: var(--space-5);
+    }
+    .actions > :global(a) {
+      align-self: auto;
+    }
+  }
+  @media (min-width: 1100px) {
+    .hero {
+      padding-top: var(--space-9);
+    }
+  }
+</style>

@@ -1,0 +1,38 @@
+---
+// DS-CMP-07. Up to five chips from the résumé's Domains line. They are plain text, not links or
+// buttons, so nothing about them looks clickable (DT-19, DR-IX13).
+interface Props {
+  chips: string[];
+}
+const { chips } = Astro.props;
+---
+
+<ul class="chips" role="list" aria-label="Domains">
+  {chips.map((chip) => (
+    <li>{chip}</li>
+  ))}
+</ul>
+
+<style>
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  li {
+    display: inline-flex;
+    align-items: center;
+    box-sizing: border-box;
+    min-height: var(--space-6);
+    padding: 0 var(--space-3);
+    border: var(--line-width) solid var(--color-line-strong);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-muted);
+    font-size: var(--text-small);
+    line-height: var(--leading-small);
+    cursor: default;
+  }
+</style>

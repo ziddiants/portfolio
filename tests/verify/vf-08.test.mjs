@@ -1,7 +1,7 @@
 // VF-08 tests (ENG-07, TC-B08): "45%" fails and "46%" passes; an approved number missing from the
 // résumé fails; rupee and multiplier forms compare in one form; figures in descriptions count.
 import { describe, expect, test } from 'vitest';
-import vf08, { figures, normFigure } from '../../scripts/verify/rules/vf-08.mjs';
+import vf08, { figures, hasToken, normFigure } from '../../scripts/verify/rules/vf-08.mjs';
 import { APPROVED, golden, resumePdf, ROOT, SITE } from './golden.mjs';
 import { buildDir, fakeVersion, ids, siteCtx } from './helpers.mjs';
 
@@ -117,5 +117,107 @@ describe('VF-08 in CI mode (D90)', () => {
     const ctx = golden({ mode: 'local', files: stub });
     expect(ids(vf08.run(ctx)).every((i) => i.startsWith('approved-in-resume'))).toBe(true);
     expect(vf08.run(ctx).length).toBeGreaterThan(0);
+  });
+});
+
+describe('VF-08 proof strip in the résumé (D106)', () => {
+  const strip = (...items) =>
+    fakeVersion('alpha', { approvedNumbers: APPROVED, proofStrip: items });
+  const withResume = (text, version) =>
+    golden({ version, files: { 'Aditya-Gupta-Resume.pdf': resumePdf({ text }) } });
+  const TEXT =
+    'Aditya Gupta\nPayment success 46% to 67%, revenue +16%, about Rs 2.5L a month\nGrew donors from 4K to 20K in 5 months';
+  const FIGS = { before: '46%', after: '67%', label: 'Payment success, CarInfo' };
+  const REV = { after: '+16%', label: 'Revenue, CarInfo' };
+  const DONORS = { before: '4K', after: '20K', label: 'Recurring donors, Impact Guru' };
+  const checks = (ctx) => vf08.run(ctx).map((f) => f.check);
+
+  test('a strip whose values are all in the résumé passes (count > 0)', () => {
+    const version = strip(FIGS, REV, DONORS);
+    expect(version.proofStrip.length).toBeGreaterThan(0);
+    expect(vf08.run(withResume(TEXT, version))).toEqual([]);
+  });
+
+  test('a percentage that is not in the résumé fails and names the value', () => {
+    const found = vf08.run(
+      withResume(
+        TEXT,
+        strip({ before: '46%', after: '68%', label: 'Payment success, CarInfo' }, REV, DONORS),
+      ),
+    );
+    expect(found).toMatchObject([
+      { check: 'proof-strip-in-resume', file: 'versions/alpha/version.json' },
+    ]);
+    expect(found[0].message).toBe(
+      'proof strip value "68%" (Payment success, CarInfo) is not in the résumé',
+    );
+  });
+
+  test('"4K" that is not in the résumé fails: the count is checked, not only %, ₹ and x', () => {
+    const text = TEXT.replace('4K to 20K', '5K to 20K');
+    const found = vf08.run(withResume(text, strip(FIGS, REV, DONORS)));
+    expect(found.map((f) => f.check)).toEqual(['proof-strip-in-resume']);
+    expect(found[0].message).toMatch(/^proof strip value "4K" \(Recurring donors/);
+  });
+
+  test('a look-alike does not satisfy a count: "14K" is not "4K"', () => {
+    expect(hasToken('donors from 14K to 20K', '4K')).toBe(false);
+    expect(hasToken('donors from 1.4K to 20K', '4K')).toBe(false);
+    expect(hasToken('a 4Kg bag', '4K')).toBe(false);
+    // A money amount or a signed number is not a count (cold review F3).
+    for (const text of [
+      'raised Rs 4K',
+      'raised Rs. 4K',
+      '₹4K',
+      '₹ 4K',
+      '$20K',
+      'INR 4K',
+      '-4K',
+      '−4K',
+      '+4K',
+      '4,4K',
+      'went (-4K)',
+    ]) {
+      expect(hasToken(text, text.includes('20K') ? '20K' : '4K'), text).toBe(false);
+    }
+    expect(hasToken('donors from 4k to 20k, quickly', '4K')).toBe(true);
+    // Words that end in "rs" or "inr" are not currency marks, and a range with a hyphen is a range
+    // (second review N2).
+    for (const [text, value] of [
+      ['recurring donors 4K to 20K', '4K'],
+      ['users 20K', '20K'],
+      ['members 4K', '4K'],
+      ['grew from 4K-20K in five months', '20K'],
+      ['from 4K–20K', '20K'],
+      ['grew from 4K−20K', '20K'],
+    ]) {
+      expect(hasToken(text, value), text).toBe(true);
+    }
+    const text = TEXT.replace('4K to 20K', '14K to 20K');
+    expect(checks(withResume(text, strip(FIGS, REV, DONORS)))).toEqual(['proof-strip-in-resume']);
+  });
+
+  test('an item with only an after value ("+16%") is checked once, in figure form', () => {
+    const text = TEXT.replace('+16%', '9%');
+    const found = vf08.run(withResume(text, strip(FIGS, REV, DONORS)));
+    expect(found.map((f) => f.check).sort()).toEqual([
+      'approved-in-resume',
+      'proof-strip-in-resume',
+    ]);
+    expect(found.find((f) => f.check === 'proof-strip-in-resume').message).toMatch(/"\+16%"/);
+  });
+
+  test('CI mode skips it with the other résumé checks (the stub résumé has no figures)', () => {
+    const stub = resumePdf({ text: 'CI stub, not a resume.\nNothing else here.' });
+    const ctx = golden({
+      mode: 'ci',
+      version: strip(FIGS, REV, DONORS),
+      files: { 'Aditya-Gupta-Resume.pdf': stub },
+    });
+    expect(vf08.run(ctx)).toEqual([]);
+  });
+
+  test('the check is listed, so the runner reports it', () => {
+    expect(vf08.checks).toContain('proof-strip-in-resume');
   });
 });

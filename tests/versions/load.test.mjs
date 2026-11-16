@@ -54,6 +54,54 @@ describe('a valid version loads', () => {
   });
 });
 
+describe('D106: the hero proof strip (proofStrip)', () => {
+  const item = { before: '45%', after: '63%', label: 'Payment success, CarInfo' };
+  const strip =
+    (n, change = (x) => x) =>
+    (s) => ({
+      ...s,
+      proofStrip: Array.from({ length: n }, (_, i) => change({ ...item }, i)),
+    });
+  test('missing', () => {
+    addVersion('payments', ({ proofStrip, ...rest }) => rest);
+    stops('payments', 'versions/payments/version.json: proofStrip is missing');
+  });
+  test('2 figures is too few, 5 is too many, 3 and 4 load', () => {
+    addVersion('payments', strip(2));
+    stops('payments', 'versions/payments/version.json: proofStrip must list 3 or 4 figures');
+    addVersion('payments', strip(5));
+    stops('payments', 'versions/payments/version.json: proofStrip must list 3 or 4 figures');
+    for (const n of [3, 4]) {
+      addVersion('payments', strip(n));
+      assert.equal(loadVersion('payments', dir).proofStrip.length, n);
+    }
+  });
+  test('"before" is optional ("+16%" has none)', () => {
+    addVersion(
+      'payments',
+      strip(3, ({ before, ...rest }) => rest),
+    );
+    assert.equal(loadVersion('payments', dir).proofStrip[0].before, undefined);
+  });
+  test('an empty label, a missing "after" and an unknown key each stop the build', () => {
+    addVersion(
+      'payments',
+      strip(3, (x, i) => (i === 0 ? { ...x, label: ' ' } : x)),
+    );
+    stops('payments', 'versions/payments/version.json: proofStrip.0.label must not be empty');
+    addVersion(
+      'payments',
+      strip(3, ({ after, ...rest }) => rest),
+    );
+    assert.throws(() => loadVersion('payments', dir), /proofStrip\.0\.after/);
+    addVersion(
+      'payments',
+      strip(3, (x) => ({ ...x, note: 'x' })),
+    );
+    assert.throws(() => loadVersion('payments', dir), /note is not a known field/);
+  });
+});
+
 describe('TC-A04: each problem stops with its ERD message', () => {
   test('no version', () => {
     stops(undefined, 'Pick a version: npm run build:payments, or npm run build for all.');

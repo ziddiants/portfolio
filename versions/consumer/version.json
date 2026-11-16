@@ -4,6 +4,28 @@
   "pagesProject": "aditya-consumerapp-pm",
   "pageTitle": "Aditya Gupta · Product Manager, Consumer Apps",
   "heroSubline": "Product Manager · consumer apps & monetization · now building with AI",
+  "proofStrip": [
+    {
+      "before": "45%",
+      "after": "63%",
+      "label": "Payment success, CarInfo"
+    },
+    {
+      "before": "4K",
+      "after": "20K",
+      "label": "Recurring donors, Impact Guru"
+    },
+    {
+      "before": "71%",
+      "after": "93%",
+      "label": "Login completion, CarInfo"
+    },
+    {
+      "before": "17%",
+      "after": "22%",
+      "label": "D1 retention, CarInfo"
+    }
+  ],
   "carinfoBullets": [
     "Overhauled the sign-up flow, increasing login completion from 71% to 93% and mapping profiles for 89% of total MAU. This led to a daily increase of 300 orders.",
     "Streamlined the onboarding journey, raising the activation rate by 20% and improving D1 retention from 17% to 22%. Implemented push notifications strategy that boosted the top-of-funnel for four key services by an average of 10%.",

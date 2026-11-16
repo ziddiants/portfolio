@@ -66,12 +66,12 @@ function buildFixture() {
     for (const f of files) cpSync(join(REPO, f), join(copy, f), { recursive: false });
     linkNodeModules(copy);
     writeFileSync(join(copy, 'src', 'pages', 'fixture.astro'), FIXTURE_PAGE);
-    // The fixture needs one real file to link to; assemble-public (and its résumé) is not run.
+    // The fixture needs one real file to link to; assemble-public is not run. The copied home page
+    // is built too, and its hero reads the résumé's size (ENG-14), so a same-size stand-in sits there.
     mkdirSync(join(copy, '.build', 'public-payments'), { recursive: true });
-    writeFileSync(
-      join(copy, '.build', 'public-payments', 'sample.pdf'),
-      Buffer.alloc(SAMPLE_BYTES),
-    );
+    for (const name of ['sample.pdf', 'Aditya-Gupta-Resume.pdf']) {
+      writeFileSync(join(copy, '.build', 'public-payments', name), Buffer.alloc(SAMPLE_BYTES));
+    }
     const r = spawnSync(join(copy, 'node_modules', '.bin', 'astro'), ['build'], {
       cwd: copy,
       env: { ...process.env, SITE_VERSION: 'payments' },

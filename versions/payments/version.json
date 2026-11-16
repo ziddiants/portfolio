@@ -4,6 +4,22 @@
   "pagesProject": "aditya-payments-pm",
   "pageTitle": "Aditya Gupta · Product Manager, Payments",
   "heroSubline": "Product Manager · payments & monetization · now building with AI",
+  "proofStrip": [
+    {
+      "before": "45%",
+      "after": "63%",
+      "label": "Payment success, CarInfo"
+    },
+    {
+      "after": "+16%",
+      "label": "Revenue, CarInfo"
+    },
+    {
+      "before": "4K",
+      "after": "20K",
+      "label": "Recurring donors, Impact Guru"
+    }
+  ],
   "carinfoBullets": [
     "Designed and built multi-gateway payment routing from the ground up, integrating 3 PGs with an auto-switch failover mechanism I ideated, lifting UPI/netbanking success from 45% to 63%, cutting ~₹2.5L/month in failed-transaction losses and growing revenue 16%.",
     "Shipped an ad-free subscription, pricing the tiers off a cost-volume-profit analysis, with post-payment prompts that doubled repeat usage from 1.3x to 2x per user/month.",
