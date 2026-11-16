@@ -60,6 +60,9 @@ const href = `/${RESUME_NAME}`;
 <style>
   .hero {
     padding-top: var(--space-7);
+    /* A word breaks only when nothing else fits, so a large text setting on a narrow screen (or a
+       wider font than ours) never pushes the page sideways (D110). */
+    overflow-wrap: anywhere;
   }
   .eyebrow {
     margin: 0 0 var(--space-3);
@@ -131,11 +134,12 @@ const href = `/${RESUME_NAME}`;
     padding-top: var(--space-5);
     border-top: var(--line-width) solid var(--color-line);
   }
-  /* D110: a figure needs about 5.5 times its font size and a single column is the whole box, so
-     15% of the box width keeps it inside at any text setting. In a wider box (two or more columns,
-     from 39rem) 15cqi is larger than the 3rem maximum, so nothing changes. */
+  /* D110: a figure needs 5.5 to 6.2 times its font size (6.2 in a wide font such as Verdana) and a
+     single column is the whole box, so 12% of the box width keeps it inside at any text setting. In
+     a wider box (two or more columns, from 39rem) 12cqi is larger than the 3rem maximum, so nothing
+     changes there. */
   .proof :global(.value) {
-    font-size: min(var(--text-ledger), 15cqi);
+    font-size: min(var(--text-ledger), 12cqi);
   }
   @container (min-width: 39rem) {
     .proof {
