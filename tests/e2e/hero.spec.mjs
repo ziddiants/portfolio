@@ -167,6 +167,62 @@ for (const id of IDS) {
   }
 }
 
+// ── DR-K14: the hero line's first letter lines up with the label above it ──────────────────────
+// The nudge is -0.04em (the most the design doc allows). The gap beside a big "I" depends on the
+// font, so the test checks the nudge itself and that the line never sticks out past the label;
+// it does not demand an exact gap, which would pass on one machine's font and fail on another's.
+for (const id of IDS) {
+  for (const width of [1280, 1920]) {
+    test(`DR-K14: ${id} at ${width} px: the hero line has a 0.04em nudge and does not stick out past the label`, async ({
+      page,
+    }) => {
+      await open(page, id, { width, height: 900 });
+      const g = await hero(page).evaluate((section) => {
+        const label = section.querySelector('p').getBoundingClientRect();
+        const h1 = section.querySelector('h1');
+        const box = h1.getBoundingClientRect();
+        const cs = getComputedStyle(h1);
+        const size = parseFloat(cs.fontSize);
+        return {
+          label: { x: label.x, y: label.y, h: label.height },
+          h1: { x: box.x, y: box.y, h: size * 1.06 },
+          em: parseFloat(cs.marginInlineStart) / size,
+        };
+      });
+      expect(g.em).toBeCloseTo(-0.04, 3);
+      const { data, info } = await sharp(await page.screenshot())
+        .raw()
+        .toBuffer({ resolveWithObject: true });
+      const bg = [data[0], data[1], data[2]];
+      const firstInk = (y0, y1, x0) => {
+        let min = Infinity;
+        for (let y = Math.floor(y0); y < Math.ceil(y1); y++) {
+          for (let x = Math.floor(x0) - 8; x < Math.floor(x0) + 80; x++) {
+            const i = (y * info.width + x) * info.channels;
+            const d =
+              Math.abs(data[i] - bg[0]) +
+              Math.abs(data[i + 1] - bg[1]) +
+              Math.abs(data[i + 2] - bg[2]);
+            if (d > 120) {
+              min = Math.min(min, x);
+              break;
+            }
+          }
+        }
+        return min;
+      };
+      const label = firstInk(g.label.y, g.label.y + g.label.h, g.label.x);
+      const line = firstInk(g.h1.y, g.h1.y + g.h1.h, g.h1.x);
+      console.log(
+        `${id} ${width}: label ink x=${label}, hero line ink x=${line}, gap ${line - label} px`,
+      );
+      expect(Number.isFinite(label) && Number.isFinite(line), 'both lines have ink').toBe(true);
+      // Never left of the label by more than a pixel (an over-nudge would show here).
+      expect(line).toBeGreaterThanOrEqual(label - 1);
+    });
+  }
+}
+
 // ── DT-19: chips cannot be mistaken for buttons ────────────────────────────────────────────────
 test('DT-19: a chip is not a link or button, is not focusable, shows a default cursor and does not react to hover', async ({
   page,

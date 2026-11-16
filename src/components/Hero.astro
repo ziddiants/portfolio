@@ -75,6 +75,9 @@ const href = `/${RESUME_NAME}`;
   }
   h1 {
     max-width: 18ch;
+    /* DR-K14: the display size leaves a gap beside the first letter, so the line looks indented
+       against the label above it. 0.04em is the most the design doc allows. */
+    margin-inline-start: -0.04em;
     font-size: var(--text-display);
     line-height: var(--leading-display);
     letter-spacing: var(--tracking-display);
