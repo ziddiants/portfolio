@@ -46,7 +46,11 @@ function makeCopy() {
   for (const id of ['payments', 'consumer']) {
     const file = join(dir, 'versions', id, 'version.json');
     const settings = JSON.parse(readFileSync(file, 'utf8'));
-    writeFileSync(file, JSON.stringify({ ...settings, approvedNumbers: ['46%'] }));
+    // The hero shows the proof strip, so the copy's strip holds the same fake figure (D106). Both
+    // versions get the same three items: the real strips differ by design (D105) and the e2e hero
+    // spec covers that.
+    const proofStrip = Array.from({ length: 3 }, () => ({ after: '46%', label: 'Test figure' }));
+    writeFileSync(file, JSON.stringify({ ...settings, approvedNumbers: ['46%'], proofStrip }));
   }
   // VF-16 and VF-06 read git, so the copy must be a real repository. A symlink is not matched by
   // the "node_modules/" rule in .gitignore, so it is excluded by hand.
@@ -193,7 +197,8 @@ describe('a full build', () => {
     const settings = readJson(join(dir, 'versions', 'payments', 'version.json'));
     const raw = readFileSync(join(dir, 'dist', 'payments', 'index.html'), 'utf8');
     const other = readFileSync(join(dir, 'dist', 'consumer', 'index.html'), 'utf8');
-    const planted = raw.replace('<h1>Portfolio</h1>', '<h1>Portfolio!</h1>');
+    const planted = raw.replace('quietly losing money', 'quietly losing money!');
+    assert.notEqual(planted, raw, 'the planted edit changed nothing, so it proves nothing');
     const consumer = readJson(join(dir, 'versions', 'consumer', 'version.json'));
     assert.notEqual(mask(planted, settings), mask(other, consumer));
   });
@@ -222,7 +227,9 @@ describe('TC-A03: shared edits reach both builds; a settings edit reaches only i
   test('editing a shared file changes both builds', () => {
     const page = join(dir, 'src', 'pages', 'index.astro');
     const original = readFileSync(page, 'utf8');
-    writeFileSync(page, original.replace('<h1>Portfolio</h1>', '<h1>Portfolio TC-A03</h1>'));
+    const edited = original.replace('<Hero />', '<Hero />\n  <p>Portfolio TC-A03</p>');
+    assert.notEqual(edited, original, 'the planted edit changed nothing, so it proves nothing');
+    writeFileSync(page, edited);
     const r = buildAll(dir);
     writeFileSync(page, original);
     assert.equal(r.status, 0, r.out);

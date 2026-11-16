@@ -1,6 +1,6 @@
 // Test helper (ENG-09, D89): writes a fake clean résumé for every version into a fake private
 // folder, so a local-mode test build finds one. Each résumé holds that version's own
-// approvedNumbers, so VF-08 can match them. Made-up text only; never the real résumés.
+// approvedNumbers and proof strip, so VF-08 can match them. Made-up text only; never the real résumés.
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,9 +21,11 @@ export function writeFakeResumes(privateDir, root = REPO) {
     const figures = settings.approvedNumbers
       .map((n) => n.replace('₹', 'Rs ').replace(/[–—]/g, '-'))
       .join(', ');
+    // The hero proof strip (D106) holds counts such as "4K" that approvedNumbers does not list.
+    const strip = settings.proofStrip.flatMap((i) => [i.before, i.after]).filter(Boolean);
     writeFileSync(
       join(privateDir, 'resumes', `${e.name}.pdf`),
-      stubResumePdf([`Test figures: ${figures}`]),
+      stubResumePdf([`Test figures: ${figures}`, `Test strip: ${strip.join(', ')}`]),
     );
   }
   writeManifest(privateDir, ids);

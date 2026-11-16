@@ -112,6 +112,7 @@ export function fakeVersion(id, overrides = {}) {
     ogImage: 'og.png',
     indexable: id === 'alpha',
     analyticsToken: 'test',
+    proofStrip: [],
     approvedNumbers: ['46%'],
     dir,
     ...overrides,

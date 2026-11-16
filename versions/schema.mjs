@@ -16,6 +16,8 @@ const fileName = str().regex(
 );
 
 const text = str().trim().min(1, 'must not be empty');
+// One figure of the hero proof strip (D106): "45% → 63%" is before + after; "+16%" is after only.
+const proofItem = z.object({ before: text.optional(), after: text, label: text }).strict();
 const list = (message) => z.array(text, { error: 'must be a list of text' }).min(1, message);
 
 export const versionSchema = z
@@ -25,6 +27,10 @@ export const versionSchema = z
     pagesProject: str().regex(SLUG, 'must be a lowercase slug'),
     pageTitle: text,
     heroSubline: text,
+    proofStrip: z
+      .array(proofItem, { error: 'must be a list of figures' })
+      .min(3, 'must list 3 or 4 figures')
+      .max(4, 'must list 3 or 4 figures'),
     carinfoBullets: list('must list at least one bullet'),
     ogImage: fileName,
     indexable: z.boolean({ error: 'must be true or false' }),

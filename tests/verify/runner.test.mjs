@@ -217,6 +217,7 @@ function cliRepo() {
     const v = JSON.parse(readFileSync(join(REPO, 'versions', id, 'version.json'), 'utf8'));
     // The test résumés say 46%, so the copy's settings say it too: the real figures are ENG-09 data.
     v.approvedNumbers = ['46%'];
+    v.proofStrip = Array.from({ length: 3 }, () => ({ after: '46%', label: 'Test figure' }));
     writeFileSync(join(dir, 'versions', id, 'version.json'), JSON.stringify(v));
     mkdirSync(out, { recursive: true });
     writeFileSync(
